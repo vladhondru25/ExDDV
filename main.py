@@ -30,13 +30,16 @@ class VideoPlayerApp:
         self.database_conn = DatabaseConnector(self.cfg)
         
         # Video list (replace with your own video file paths)
-        self.video_list = [os.path.join(self.movies_path, video_name) for video_name in os.listdir(self.movies_path)]
+        self.video_list = [video_name for video_name in os.listdir(self.movies_path)]
         self.current_video_index = 0
         self.is_playing = False  # Flag to track if the video is playing
 
         videos_annotated = self.database_conn.read_movie_entries(self.username)
         videos_not_annotated = set(self.video_list).difference(videos_annotated) 
+        print(f"Original videos: {len(self.video_list)}")
         self.video_list = list(videos_not_annotated)
+        self.video_list = [os.path.join(self.movies_path, video_name) for video_name in self.video_list]
+        print(f"Remaining videos: {len(self.video_list)}")
 
         # FPS (frames per second) control
         self.fps = 24  # You can adjust this to control the playback speed
@@ -63,7 +66,8 @@ class VideoPlayerApp:
         self.input_label = ttk.Label(self.root, text="Enter Text:")
         self.input_label.pack(pady=5)
 
-        self.text_box = ttk.Entry(self.root, width=50)
+        # self.text_box = ttk.Entry(self.root, width=50)
+        self.text_box = tk.Text(self.root, height=7, width=40, font=('Arial', 14))
         self.text_box.pack(pady=5)
 
         self.submit_button = ttk.Button(self.root, text="Submit", command=self.submit_text)
@@ -125,7 +129,7 @@ class VideoPlayerApp:
 
     def submit_text(self):
         # Retrieve the text from the text box
-        text = self.text_box.get()
+        text = self.text_box.get("1.0", tk.END).strip()
 
         # In a real application, you would send the text to a server, database, etc.
         # For this example, we'll just print it to the console
@@ -142,8 +146,8 @@ class VideoPlayerApp:
             manipulation=manipulation_folder
         )
 
-        # Clear the text box
-        self.text_box.delete(0, tk.END)
+        # # Clear the text box
+        self.text_box.delete("1.0", tk.END)
 
         # Show success message
         messagebox.showinfo("Success", "Text submitted successfully!")

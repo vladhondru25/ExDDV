@@ -1,43 +1,44 @@
-import mysql.connector
-from mysql.connector import Error
+import sqlite3
 
 
 class DatabaseConnector(object):
     def __init__(self, cfg) -> None:
-        try:
-            self.connection = mysql.connector.connect(
-                host=cfg["DB_CREDENTIALS"]["HOST"],
-                user=cfg["DB_CREDENTIALS"]["USER"],
-                password=cfg["DB_CREDENTIALS"]["PASSWORD"],
-                database=cfg["DB_CREDENTIALS"]["DATABASE"]
-            )
+        # Create a connection to the SQLite database
+        # If the database file does not exist, it will be created
+        self.connection = sqlite3.connect('my_database.db')
 
-            self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation) VALUES (%s, %s, %s, %s, %s)"
-            self.select_query = "SELECT video_name FROM annotations WHERE user = '{}'"
-            
-            if not self.connection.is_connected():
-                raise ValueError("Could not connect to ")
-            
-        except Error as e:
-            print(f"Error: {e}")
-        except ValueError as e:
-            print(f"Error: {e}")
+        # Create a cursor object to execute SQL queries
+        self.cursor = self.connection.cursor()
+        # Create a table (if it doesn't already exist)
+        self.cursor.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS annotations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user VARCHAR(45) NOT NULL,
+                video_name VARCHAR(100) NOT NULL,
+                text MEDIUMTEXT NOT NULL,
+                dataset VARCHAR(45) NOT NULL,
+                manipulation VARCHAR(100) NOT NULL
+            )
+            '''
+        )
+
+        # Commit the changes and close the connection
+        self.connection.commit()
+        print("Database and table created successfully!")
+
+        self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation) VALUES (?, ?, ?, ?, ?)"
+        self.select_query = "SELECT video_name FROM annotations WHERE user = '{}'"
 
     def add_row(self, user, video_name, text, dataset, manipulation):
-        cursor = self.connection.cursor()
-
-        cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation))
+        self.cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation))
         self.connection.commit()
 
-        cursor.close()
-
     def read_movie_entries(self, username):
-        with self.connection.cursor() as cursor:
-            cursor.execute(self.select_query.format(username))
-            rows = cursor.fetchall()
+        self.cursor.execute(self.select_query.format(username))
+        rows = self.cursor.fetchall()
                 
         return set(v[0] for v in rows)
 
     def close(self):
-        if self.connection.is_connected():
-            self.connection.close()
+        self.connection.close()
