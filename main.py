@@ -1,12 +1,14 @@
 import configparser
 import os
+import threading
+import time
 import signal
 from PIL import Image, ImageTk
 
-import imageio
+import cv2
+import numpy as np
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
+from tkinter import Label, Button, messagebox
 
 from database import DatabaseConnector
 from utils import on_ctrl_c_signal, cleanup_and_exit
@@ -24,108 +26,161 @@ class VideoPlayerApp:
         self.cfg.read('config.cfg')
 
         self.movies_path = self.cfg["USER_DATA"]["MOVIES_PATH"]
+        self.original_movies_path = self.cfg["USER_DATA"]["ORIGINAL_MOVIES_PATH"]
         self.username = self.cfg["USER_DATA"]["USERNAME"]
 
         # Dabase connector
         self.database_conn = DatabaseConnector(self.cfg)
         
-        # Video list (replace with your own video file paths)
-        self.video_list = [video_name for video_name in os.listdir(self.movies_path)]
-        self.current_video_index = 0
-        self.is_playing = False  # Flag to track if the video is playing
+        # List of video pairs (source, target)
+        video_names = os.listdir(self.movies_path)
+        # This is used to select Eduard's or Vlad's videos
+        if self.username == "Eduard Hogea":
+            video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) < 500]
+        else:
+            video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) >= 500]
+
+        print(f"Original videos: {len(video_names)}")
 
         videos_annotated = self.database_conn.read_movie_entries(self.username)
-        videos_not_annotated = set(self.video_list).difference(videos_annotated) 
-        print(f"Original videos: {len(self.video_list)}")
-        self.video_list = list(videos_not_annotated)
-        self.video_list = [os.path.join(self.movies_path, video_name) for video_name in self.video_list]
-        print(f"Remaining videos: {len(self.video_list)}")
+        videos_not_annotated = set(video_names).difference(videos_annotated) 
+        video_names = list(videos_not_annotated)
+        print(f"Remaining videos: {len(video_names)}")
 
-        # FPS (frames per second) control
-        self.fps = 24  # You can adjust this to control the playback speed
+        video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
+        video_pairs_2 = [os.path.join(self.original_movies_path, f"{video_name.split('_')[0]}.mp4") for video_name in video_names]
 
-        # Label to display the current video
-        self.video_label = ttk.Label(self.root, text="Video Player", font=("Arial", 16))
-        self.video_label.pack(pady=10)
+        self.video_pairs = list(zip(video_pairs_1, video_pairs_2))
 
-        # Canvas to show video frames
-        self.canvas = tk.Canvas(self.root, width=640, height=360)
-        self.canvas.pack()
+        self.current_index = 0
+        self.show_video_2 = False  # Initially hide the second video
+
+        # Create labels to hold the videos
+        self.video_label_1 = Label(self.root)
+        self.video_label_1.grid(row=0, column=0, columnspan=3, padx=10, pady=10)
+
+        self.video_label_2 = Label(self.root)
+        self.video_label_2.grid(row=0, column=3, columnspan=3, padx=10, pady=10)
 
         # Control buttons
-        self.previous_button = ttk.Button(self.root, text="Previous", command=self.show_previous_video)
-        self.previous_button.pack(side=tk.LEFT, padx=10, pady=10)
+        self.prev_button = Button(self.root, text="Previous", command=self.show_previous)
+        self.prev_button.grid(row=1, column=0, padx=10, pady=10)
 
-        self.restart_button = ttk.Button(self.root, text="Restart video", command=self.restart_video)
-        self.restart_button.pack(side=tk.LEFT, padx=10, pady=10)
+        self.restart_button = Button(self.root, text="Restart video", command=self.restart_video)
+        self.restart_button.grid(row=1, column=1, padx=10, pady=10)
 
-        self.next_button = ttk.Button(self.root, text="Next", command=self.show_next_video)
-        self.next_button.pack(side=tk.RIGHT, padx=10, pady=10)
+        self.next_button = Button(self.root, text="Next", command=self.show_next)
+        self.next_button.grid(row=1, column=2, padx=10, pady=10)
+
+        self.reveal_button = Button(self.root, text="Reveal/Hide Target Video", command=self.reveal_hide_video)
+        self.reveal_button.grid(row=1, column=4, padx=10, pady=10)
 
         # Add Text Box and Submit Button
-        self.input_label = ttk.Label(self.root, text="Enter Text:")
-        self.input_label.pack(pady=5)
+        self.input_label = Label(self.root, text="Enter Text:")
+        self.input_label.grid(row=2, column=0, pady=5)
 
         # self.text_box = ttk.Entry(self.root, width=50)
         self.text_box = tk.Text(self.root, height=7, width=40, font=('Arial', 14))
-        self.text_box.pack(pady=5)
+        self.text_box.grid(row=2, column=1, pady=5)
 
-        self.submit_button = ttk.Button(self.root, text="Submit", command=self.submit_text)
-        self.submit_button.pack(pady=5)
+        self.submit_button = Button(self.root, text="Submit", command=self.submit_text)
+        self.submit_button.grid(row=2, column=2, pady=5)
 
-        # Load and play the initial video
-        self.load_video(self.video_list[self.current_video_index])
+        # Flags to control video threads
+        self.stop_threads = False
+        self.thread = None
 
-    def load_video(self, video_path):
-        if not os.path.exists(video_path):
-            messagebox.showerror("Error", f"Video file not found: {video_path}")
-            return
+        # Load the initial video pair
+        self.load_videos()
+
+    def load_videos(self):
+        # Get the current video paths
+        source_video, target_video = self.video_pairs[self.current_index]
+
+        # Stop any currently running videos
+        self.stop_current_videos()
+
+        # Start the thread to play the new videos
+        self.stop_threads = False
+        self.thread = threading.Thread(target=self.play_videos, args=(source_video, target_video))
+        self.thread.start()
+
+    def stop_current_videos(self):
+        # Signal the threads to stop
+        self.stop_threads = True
+
+        # Join the threads to ensure they have stopped before loading new videos
+        if self.thread is not None:
+            self.thread.join()
+
+        self.thread = None
+
+    def play_videos(self, video_path_1, video_path_2):
+        cap1 = cv2.VideoCapture(video_path_1)
+        cap2 = cv2.VideoCapture(video_path_2)
         
-        self.video_label.config(text=f"Playing: {os.path.basename(video_path)}")
-        self.reader = imageio.get_reader(video_path)
+        # Determine the frame rate to sync the playback
+        fps1 = cap1.get(cv2.CAP_PROP_FPS) or 24  # Default to 30 FPS if FPS is not available
+        fps2 = cap2.get(cv2.CAP_PROP_FPS) or 24
+        sync_fps = min(fps1, fps2)  # Sync both videos to the slower frame rate
+        delay = int(1000 / sync_fps)  # Delay in milliseconds between frames
 
-        self.is_playing = True
-        self.current_frame = 0  # Start from the first frame
-        self.play_video()
+        while not self.stop_threads:
+            ret1, frame1 = cap1.read()
+            ret2, frame2 = cap2.read()
 
-    def play_video(self):
-        if self.is_playing:
-            try:
-                # Get the current frame
-                frame = self.reader.get_data(self.current_frame)
+            if not ret1 or not ret2 or self.stop_threads:
+                break  # End of video or stop signal received
 
-                # Convert frame to Image and resize to fit canvas
-                frame_image = Image.fromarray(frame)
-                frame_image = frame_image.resize((640, 360))
-                frame_photo = ImageTk.PhotoImage(frame_image)
+            # Resize frames to fit the labels
+            frame1 = cv2.resize(frame1, (500, 400))
+            if self.show_video_2:
+                frame2 = cv2.resize(frame2, (500, 400))
+            else:
+                frame2 = np.zeros((400, 500, 3), dtype=np.uint8)
 
-                # Display frame on canvas
-                self.canvas.create_image(0, 0, anchor=tk.NW, image=frame_photo)
-                self.canvas.image = frame_photo
+            # Convert frames to RGB format (Tkinter uses RGB, OpenCV uses BGR)
+            frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
+            frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
 
-                # Update current frame
-                self.current_frame += 1
+            # Convert the frames to PIL Images, then to Tkinter PhotoImages
+            img1 = Image.fromarray(frame1)
+            img2 = Image.fromarray(frame2)
 
-                # Control FPS by adding delay based on desired FPS
-                delay = int(1000 / self.fps)  # Convert FPS to milliseconds
-                self.root.after(delay, self.play_video)
+            imgtk1 = ImageTk.PhotoImage(image=img1)
+            imgtk2 = ImageTk.PhotoImage(image=img2)
 
-            except IndexError:
-                # Reached end of video
-                self.is_playing = False
+            # Update the labels with the new frames
+            self.video_label_1.imgtk = imgtk1  # Prevent garbage collection
+            self.video_label_1.config(image=imgtk1)
+
+            self.video_label_2.imgtk = imgtk2  # Prevent garbage collection
+            self.video_label_2.config(image=imgtk2)
+
+            # Wait for the next frame, based on the synchronized frame rate
+            time.sleep(delay / 1000.0)
+
+        cap1.release()
+        cap2.release()
 
     def restart_video(self):
-        self.current_frame = 0
-        self.is_playing = True
-        self.play_video()
+        self.load_videos()
 
-    def show_next_video(self):
-        self.current_video_index = (self.current_video_index + 1) % len(self.video_list)
-        self.load_video(self.video_list[self.current_video_index])
+    def show_next(self):
+        if self.current_index < len(self.video_pairs) - 1:
+            self.current_index += 1
+            self.show_video_2 = False  # Hide the second video initially for the previous pair
+            self.load_videos()
 
-    def show_previous_video(self):
-        self.current_video_index = (self.current_video_index - 1) % len(self.video_list)
-        self.load_video(self.video_list[self.current_video_index])
+    def show_previous(self):
+        if self.current_index > 0:
+            self.current_index -= 1
+            self.show_video_2 = False  # Hide the second video initially for the previous pair
+            self.load_videos()
+
+    def reveal_hide_video(self):
+        # Set flag to show the second video and reload the video frames
+        self.show_video_2 = not self.show_video_2
 
     def submit_text(self):
         # Retrieve the text from the text box
@@ -134,7 +189,7 @@ class VideoPlayerApp:
         # In a real application, you would send the text to a server, database, etc.
         # For this example, we'll just print it to the console
         # print(f"Text submitted: {text}")
-        movie_path = self.video_list[self.current_video_index]
+        movie_path = self.video_pairs[self.current_index][0]
         movie_path_head, movie_name_db = os.path.split(movie_path)
         _, manipulation_folder = os.path.split(movie_path_head)
 
@@ -158,11 +213,12 @@ class VideoPlayerApp:
 
 # Main application
 if __name__ == "__main__":
+    # Create the main Tkinter window
     root = tk.Tk()
 
-    app = VideoPlayerApp(root)    
+    # Create the video player application
+    app = VideoPlayerApp(root)
 
-        
     # Bind the window close (X button) to the custom handler
     def _callback_destroy():
         cleanup_and_exit(root, app)
