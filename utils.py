@@ -10,6 +10,9 @@ def on_ctrl_c_signal(signal_received, frame, root, app):
 def cleanup_and_exit(root, app):
     # Close db connection
     app.close_db_connection()
+
+    # Close threads
+    app.stop_current_videos()
     
     # Gracefully close the tkinter application
     root.quit()  # Stops the mainloop
