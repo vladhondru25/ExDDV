@@ -18,7 +18,8 @@ class DatabaseConnector(object):
                 video_name VARCHAR(100) NOT NULL,
                 text MEDIUMTEXT NOT NULL,
                 dataset VARCHAR(45) NOT NULL,
-                manipulation VARCHAR(100) NOT NULL
+                manipulation VARCHAR(100) NOT NULL,
+                click_locations TEXT
             )
             '''
         )
@@ -27,11 +28,11 @@ class DatabaseConnector(object):
         self.connection.commit()
         print("Database and table created successfully!")
 
-        self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation) VALUES (?, ?, ?, ?, ?)"
+        self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation, click_locations) VALUES (?, ?, ?, ?, ?, ?)"
         self.select_query = "SELECT video_name FROM annotations WHERE user = '{}'"
 
-    def add_row(self, user, video_name, text, dataset, manipulation):
-        self.cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation))
+    def add_row(self, user, video_name, text, dataset, manipulation, click_locations):
+        self.cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation, click_locations))
         self.connection.commit()
 
     def read_movie_entries(self, username):

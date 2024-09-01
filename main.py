@@ -1,4 +1,5 @@
 import configparser
+import json
 import os
 import threading
 import time
@@ -31,6 +32,9 @@ class VideoPlayerApp:
 
         # Dabase connector
         self.database_conn = DatabaseConnector(self.cfg)
+
+        self.width = 500
+        self.height = 400
         
         # List of video pairs (source, target)
         video_names = os.listdir(self.movies_path)
@@ -61,6 +65,10 @@ class VideoPlayerApp:
 
         self.video_label_2 = Label(self.root)
         self.video_label_2.grid(row=0, column=3, columnspan=3, padx=10, pady=10)
+
+        # Create the functionality of storing click locations
+        self.video_label_1.bind("<Button-1>", self.on_click)
+        self.click_locations = {}
 
         # Control buttons
         self.prev_button = Button(self.root, text="Previous", command=self.show_previous)
@@ -125,6 +133,7 @@ class VideoPlayerApp:
         sync_fps = min(fps1, fps2)  # Sync both videos to the slower frame rate
         delay = int(1000 / sync_fps)  # Delay in milliseconds between frames
 
+        self.frame_idx = 0
         while not self.stop_threads:
             ret1, frame1 = cap1.read()
             ret2, frame2 = cap2.read()
@@ -133,11 +142,11 @@ class VideoPlayerApp:
                 break  # End of video or stop signal received
 
             # Resize frames to fit the labels
-            frame1 = cv2.resize(frame1, (500, 400))
+            frame1 = cv2.resize(frame1, (self.width, self.height))
             if self.show_video_2:
-                frame2 = cv2.resize(frame2, (500, 400))
+                frame2 = cv2.resize(frame2, (self.width, self.height))
             else:
-                frame2 = np.zeros((400, 500, 3), dtype=np.uint8)
+                frame2 = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
             # Convert frames to RGB format (Tkinter uses RGB, OpenCV uses BGR)
             frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
@@ -160,6 +169,8 @@ class VideoPlayerApp:
             # Wait for the next frame, based on the synchronized frame rate
             time.sleep(delay / 1000.0)
 
+            self.frame_idx += 1
+
         cap1.release()
         cap2.release()
 
@@ -168,12 +179,16 @@ class VideoPlayerApp:
 
     def show_next(self):
         if self.current_index < len(self.video_pairs) - 1:
+            self.click_locations = {}
+
             self.current_index += 1
             self.show_video_2 = False  # Hide the second video initially for the previous pair
             self.load_videos()
 
     def show_previous(self):
         if self.current_index > 0:
+            self.click_locations = {}
+
             self.current_index -= 1
             self.show_video_2 = False  # Hide the second video initially for the previous pair
             self.load_videos()
@@ -198,14 +213,22 @@ class VideoPlayerApp:
             video_name=movie_name_db,
             text=text,
             dataset=DATASET,
-            manipulation=manipulation_folder
+            manipulation=manipulation_folder,
+            click_locations = json.dumps(self.click_locations)
         )
 
-        # # Clear the text box
+        # Clear the text box
         self.text_box.delete("1.0", tk.END)
+
+        self.click_locations = {}
 
         # Show success message
         messagebox.showinfo("Success", "Text submitted successfully!")
+
+    def on_click(self, event):
+        # Get the coordinates of the click relative to the Label
+        x, y = event.x, event.y
+        self.click_locations[self.frame_idx] = {"x": x / self.width, "y": y / self.height}
 
     def close_db_connection(self):
         self.database_conn.close()
