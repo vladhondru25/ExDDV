@@ -1,11 +1,18 @@
+from enum import Enum
+
 import sqlite3
+
+
+class Difficulty(Enum):
+    EASY = 1
+    HARD = 2
 
 
 class DatabaseConnector(object):
     def __init__(self, cfg) -> None:
         # Create a connection to the SQLite database
         # If the database file does not exist, it will be created
-        self.connection = sqlite3.connect('my_database.db')
+        self.connection = sqlite3.connect('my_database2.db')
 
         # Create a cursor object to execute SQL queries
         self.cursor = self.connection.cursor()
@@ -19,7 +26,8 @@ class DatabaseConnector(object):
                 text MEDIUMTEXT NOT NULL,
                 dataset VARCHAR(45) NOT NULL,
                 manipulation VARCHAR(100) NOT NULL,
-                click_locations TEXT
+                click_locations TEXT,
+                difficulty INTEGER NOT NULL
             )
             '''
         )
@@ -28,11 +36,11 @@ class DatabaseConnector(object):
         self.connection.commit()
         print("Database and table created successfully!")
 
-        self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation, click_locations) VALUES (?, ?, ?, ?, ?, ?)"
+        self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation, click_locations, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?)"
         self.select_query = "SELECT video_name FROM annotations WHERE user = '{}'"
 
-    def add_row(self, user, video_name, text, dataset, manipulation, click_locations):
-        self.cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation, click_locations))
+    def add_row(self, user, video_name, text, dataset, manipulation, click_locations, difficulty):
+        self.cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation, click_locations, difficulty))
         self.connection.commit()
 
     def read_movie_entries(self, username):
