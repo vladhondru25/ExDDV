@@ -11,7 +11,7 @@ import numpy as np
 import tkinter as tk
 from tkinter import Label, Button, messagebox
 
-from database import DatabaseConnector
+from database import DatabaseConnector, Difficulty
 from utils import on_ctrl_c_signal, cleanup_and_exit
 
 
@@ -87,12 +87,23 @@ class VideoPlayerApp:
         self.input_label = Label(self.root, text="Enter Text:")
         self.input_label.grid(row=2, column=0, pady=5)
 
-        # self.text_box = ttk.Entry(self.root, width=50)
         self.text_box = tk.Text(self.root, height=7, width=40, font=('Arial', 14))
         self.text_box.grid(row=2, column=1, pady=5)
 
         self.submit_button = Button(self.root, text="Submit", command=self.submit_text)
         self.submit_button.grid(row=2, column=2, pady=5)
+
+        # Radio buttons for difficulty
+        self.input_difficulty = Label(self.root, text="Difficulty:")
+        self.input_difficulty.grid(row=2, column=4, pady=(0,50))
+
+        self.selected_value = tk.StringVar()
+        self.selected_value.set(Difficulty.EASY.value)
+
+        self.radio1 = tk.Radiobutton(root, text="Easy", variable=self.selected_value, value=Difficulty.EASY.value)
+        self.radio1.grid(row=2, column=4, padx=(0,100), pady=10)
+        self.radio2 = tk.Radiobutton(root, text="Hard", variable=self.selected_value, value=Difficulty.HARD.value)
+        self.radio2.grid(row=2, column=4, padx=(100,0), pady=10)
 
         # Flags to control video threads
         self.stop_threads = False
@@ -214,7 +225,8 @@ class VideoPlayerApp:
             text=text,
             dataset=DATASET,
             manipulation=manipulation_folder,
-            click_locations = json.dumps(self.click_locations)
+            click_locations = json.dumps(self.click_locations),
+            difficulty=self.selected_value.get()
         )
 
         # Clear the text box
