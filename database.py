@@ -5,7 +5,8 @@ import sqlite3
 
 class Difficulty(Enum):
     EASY = 1
-    HARD = 2
+    MEDIUM = 2
+    HARD = 3
 
 
 class DatabaseConnector(object):

@@ -15,9 +15,6 @@ from database import DatabaseConnector, Difficulty
 from utils import on_ctrl_c_signal, cleanup_and_exit
 
 
-DATASET = "Farceforensics++"
-
-
 class VideoPlayerApp:
     def __init__(self, root):
         self.root = root
@@ -26,6 +23,7 @@ class VideoPlayerApp:
         self.cfg = configparser.ConfigParser()
         self.cfg.read('config.cfg')
 
+        self.dataset = self.cfg["USER_DATA"]["DATASET"]
         self.movies_path = self.cfg["USER_DATA"]["MOVIES_PATH"]
         self.original_movies_path = self.cfg["USER_DATA"]["ORIGINAL_MOVIES_PATH"]
         self.username = self.cfg["USER_DATA"]["USERNAME"]
@@ -35,26 +33,9 @@ class VideoPlayerApp:
 
         self.width = 500
         self.height = 400
-        
-        # List of video pairs (source, target)
-        video_names = os.listdir(self.movies_path)
-        # This is used to select Eduard's or Vlad's videos
-        if self.username == "Eduard Hogea":
-            video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) < 500]
-        else:
-            video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) >= 500]
 
-        print(f"Original videos: {len(video_names)}")
-
-        videos_annotated = self.database_conn.read_movie_entries(self.username)
-        videos_not_annotated = set(video_names).difference(videos_annotated) 
-        video_names = list(videos_not_annotated)
-        print(f"Remaining videos: {len(video_names)}")
-
-        video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
-        video_pairs_2 = [os.path.join(self.original_movies_path, f"{video_name.split('_')[0]}.mp4") for video_name in video_names]
-
-        self.video_pairs = list(zip(video_pairs_1, video_pairs_2))
+        # Get the input data
+        self._initialise_data()
 
         self.current_index = 0
         self.show_video_2 = False  # Initially hide the second video
@@ -80,7 +61,12 @@ class VideoPlayerApp:
         self.next_button = Button(self.root, text="Next", command=self.show_next)
         self.next_button.grid(row=1, column=2, padx=10, pady=10)
 
-        self.reveal_button = Button(self.root, text="Reveal/Hide Target Video", command=self.reveal_hide_video)
+        self.reveal_button = Button(
+            self.root,
+            text="Reveal/Hide Target Video",
+            command=self.reveal_hide_video,
+            # state="normal" if self.dataset == "Farceforensics++" else "disabled"
+        )
         self.reveal_button.grid(row=1, column=4, padx=10, pady=10)
 
         # Add Text Box and Submit Button
@@ -98,12 +84,14 @@ class VideoPlayerApp:
         self.input_difficulty.grid(row=2, column=4, pady=(0,50))
 
         self.selected_value = tk.StringVar()
-        self.selected_value.set(Difficulty.EASY.value)
+        self.selected_value.set(Difficulty.MEDIUM.value)
 
         self.radio1 = tk.Radiobutton(root, text="Easy", variable=self.selected_value, value=Difficulty.EASY.value)
-        self.radio1.grid(row=2, column=4, padx=(0,100), pady=10)
-        self.radio2 = tk.Radiobutton(root, text="Hard", variable=self.selected_value, value=Difficulty.HARD.value)
-        self.radio2.grid(row=2, column=4, padx=(100,0), pady=10)
+        self.radio1.grid(row=2, column=4, padx=(0,150), pady=10)
+        self.radio2 = tk.Radiobutton(root, text="Medium", variable=self.selected_value, value=Difficulty.MEDIUM.value)
+        self.radio2.grid(row=2, column=4, pady=10)
+        self.radio3 = tk.Radiobutton(root, text="Hard", variable=self.selected_value, value=Difficulty.HARD.value)
+        self.radio3.grid(row=2, column=4, padx=(150,0), pady=10)
 
         # Flags to control video threads
         self.stop_threads = False
@@ -112,9 +100,57 @@ class VideoPlayerApp:
         # Load the initial video pair
         self.load_videos()
 
+    def _initialise_data(self):
+        video_names = os.listdir(self.movies_path)
+
+        if self.dataset == "Farceforensics++":
+            # This is used to select Eduard's or Vlad's videos
+            if self.username == "Eduard Hogea":
+                video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) < 500]
+            else:
+                video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) >= 500]
+
+            print(f"Original videos: {len(video_names)}")
+
+            videos_annotated = self.database_conn.read_movie_entries(self.username)
+            videos_not_annotated = set(video_names).difference(videos_annotated) 
+            video_names = list(videos_not_annotated)
+            print(f"Remaining videos: {len(video_names)}")
+
+            video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
+            video_pairs_2 = [os.path.join(self.original_movies_path, f"{video_name.split('_')[0]}.mp4") for video_name in video_names]
+        elif self.dataset == "DeepfakeDetection":
+            video_names.remove("metadata.json")
+            
+            with open(os.path.join(self.movies_path, "metadata.json")) as input_json:
+                metadata = json.load(input_json)
+
+            video_names = [vid_name for vid_name in video_names if metadata[vid_name]["label"] == "FAKE"]
+            video_names = sorted(video_names)
+            if self.username == "Eduard Hogea":
+                video_names = video_names[:len(video_names) // 2]
+            else:
+                video_names = video_names[len(video_names) // 2:]
+
+            print(f"Original videos: {len(video_names)}")
+            videos_annotated = self.database_conn.read_movie_entries(self.username)
+            videos_not_annotated = set(video_names).difference(videos_annotated) 
+            video_names = list(videos_not_annotated)
+            print(f"Remaining videos: {len(video_names)}")
+
+            video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
+            video_pairs_2 = [os.path.join(self.movies_path, metadata[video_name]["original"]) for video_name in video_names]
+        else:
+            raise Exception("Dataset not implemented")
+        
+        self.video_pairs = list(zip(video_pairs_1, video_pairs_2))
+
     def load_videos(self):
         # Get the current video paths
         source_video, target_video = self.video_pairs[self.current_index]
+
+        # Configure the border properties
+        # self.video_label_1.config(highlightbackground="red", highlightcolor="red", highlightthickness=2)
 
         # Stop any currently running videos
         self.stop_current_videos()
@@ -223,7 +259,7 @@ class VideoPlayerApp:
             user=self.username,
             video_name=movie_name_db,
             text=text,
-            dataset=DATASET,
+            dataset=self.dataset,
             manipulation=manipulation_folder,
             click_locations = json.dumps(self.click_locations),
             difficulty=self.selected_value.get()
