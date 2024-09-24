@@ -31,8 +31,8 @@ class VideoPlayerApp:
         # Dabase connector
         self.database_conn = DatabaseConnector(self.cfg)
 
-        self.width = 500
-        self.height = 400
+        self.width = 600
+        self.height = 500
 
         # Get the input data
         self._initialise_data()
@@ -149,9 +149,6 @@ class VideoPlayerApp:
         # Get the current video paths
         source_video, target_video = self.video_pairs[self.current_index]
 
-        # Configure the border properties
-        # self.video_label_1.config(highlightbackground="red", highlightcolor="red", highlightthickness=2)
-
         # Stop any currently running videos
         self.stop_current_videos()
 
@@ -180,6 +177,10 @@ class VideoPlayerApp:
         sync_fps = min(fps1, fps2)  # Sync both videos to the slower frame rate
         delay = int(1000 / sync_fps)  # Delay in milliseconds between frames
 
+        video_width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+        video_height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        new_width, new_height = self.resize_to_fit_frame(video_width, video_height)
+
         self.frame_idx = 0
         while not self.stop_threads:
             ret1, frame1 = cap1.read()
@@ -189,11 +190,11 @@ class VideoPlayerApp:
                 break  # End of video or stop signal received
 
             # Resize frames to fit the labels
-            frame1 = cv2.resize(frame1, (self.width, self.height))
+            frame1 = cv2.resize(frame1, (new_width, new_height))
             if self.show_video_2:
-                frame2 = cv2.resize(frame2, (self.width, self.height))
+                frame2 = cv2.resize(frame2, (new_width, new_height))
             else:
-                frame2 = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+                frame2 = np.zeros((new_height, new_width, 3), dtype=np.uint8)
 
             # Convert frames to RGB format (Tkinter uses RGB, OpenCV uses BGR)
             frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
@@ -220,6 +221,24 @@ class VideoPlayerApp:
 
         cap1.release()
         cap2.release()
+
+    def resize_to_fit_frame(self, video_width, video_height):
+        """ Function to scale video while maintaining aspect ratio """
+        # Calculate aspect ratios
+        video_aspect_ratio = video_width / video_height
+        frame_aspect_ratio = self.width / self.height
+
+        # Scale based on which dimension constrains more
+        if video_aspect_ratio > frame_aspect_ratio:
+            # Width constrains the video
+            new_width = self.width
+            new_height = int(self.width / video_aspect_ratio)
+        else:
+            # Height constrains the video
+            new_height = self.height
+            new_width = int(self.height * video_aspect_ratio)
+
+        return new_width, new_height
 
     def restart_video(self):
         self.load_videos()
