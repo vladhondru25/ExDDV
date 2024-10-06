@@ -1,23 +1,30 @@
 import json
 import os
 from enum import Enum
+from PIL import Image
 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
+from lavis.processors.blip_processors import (
+    BlipImageTrainProcessor,
+    Blip2ImageTrainProcessor,
+    BlipImageEvalProcessor,
+    BlipCaptionProcessor,
+)
 from torch.utils.data import Dataset, DataLoader
 
 
 class Label(Enum):
-    REAL = 0
-    FAKE = 1
+    REAL = 0.0
+    FAKE = 1.0
 INPUT_NO_OF_FRAMES = 5
 WIDTH = 500
 HEIGHT = 400
 
 class ExplainableDataset(Dataset):
-    def __init__(self) -> None:
+    def __init__(self, split, vis_processors=None) -> None:
         csv_data_fake = pd.read_csv("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/dataset.csv")
         csv_data_fake["movie_name"] = csv_data_fake["movie_name"].map(
             lambda x: os.path.join("/media/vhondru/hdd/dp/manipulated_videos/end_to_end", x)
@@ -28,13 +35,45 @@ class ExplainableDataset(Dataset):
         csv_data_real["movie_name"] = csv_data_real["movie_name"].map(
             lambda x: os.path.join("/media/vhondru/hdd/dp/original_data/original/data/original_sequences/youtube/c23/videos", x)
         )
+        csv_data_real["text"] = "There is nothing unnormal in the video."
         csv_data_real["label"] = Label.REAL.value
 
         self.csv_data = pd.concat((csv_data_fake, csv_data_real))
+        # self.csv_data = csv_data_fake
+
+
+        self.csv_data = self.csv_data.sample(frac=1, random_state=0).reset_index()
+
+        if split == "train":
+            self.csv_data = self.csv_data[100:]
+        elif split == "val":
+            self.csv_data = self.csv_data[:100]
+        else:
+            raise Exception(f"split={split} not implemented.")
+
         self.csv_data.reset_index(inplace=True)
+
+        self.vis_processor = vis_processors if vis_processors != None else Blip2ImageTrainProcessor()
+        self.text_processor = BlipCaptionProcessor()
 
     def __len__(self):
         return len(self.csv_data)
+    
+    def collater(self, samples):
+        # Filter out None samples
+        samples = [s for s in samples if s is not None]
+        # Check if samples is empty after filtering
+        if not samples:
+            return {}
+        collated_dict = {}
+        keys = samples[0].keys() # Use the keys of the first sample as a reference
+        for k in keys:
+            values = [sample[k] for sample in samples]
+            # If the value type for the key is torch.Tensor, stack them else return list
+            collated_dict[k] = torch.stack(values, dim=0) if isinstance(values[0], torch.Tensor) else values
+
+        return collated_dict
+        # return default_collate(samples)
     
     def __getitem__(self, index):
         video_metadata = self.csv_data.loc[index]
@@ -43,6 +82,7 @@ class ExplainableDataset(Dataset):
         text = video_metadata["text"]
         click_locations = video_metadata["click_locations"]
         label = video_metadata["label"]
+        image_id = 0 # TODO
 
         cap = cv2.VideoCapture(movie_name)
         movie_no_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -82,27 +122,32 @@ class ExplainableDataset(Dataset):
             # Read the frame
             ret, frame = cap.read()
 
-            frame = cv2.resize(frame, (WIDTH, HEIGHT))
+            # frame = cv2.resize(frame, (WIDTH, HEIGHT))
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = Image.fromarray(frame)
+            frame = self.vis_processor(frame)
 
             frames.append(frame)
 
-        return np.stack(frames), label
+        text_input = self.text_processor(text)
+    
+        return {"image": torch.stack(frames), "label": torch.tensor(label), "text_input": text_input, "image_id": image_id}
 
 
 if __name__ == "__main__":
-    ds = ExplainableDataset()
-    dl = DataLoader(ds, batch_size=8, shuffle=True, num_workers=8, pin_memory=True)
+    ds = ExplainableDataset("train")
+    print(ds[0])
+    # dl = DataLoader(ds, batch_size=8, shuffle=True, num_workers=8, pin_memory=True)
 
-    for batch in dl:
-        frames, labels = batch
+    # for batch in dl:
+    #     frames = batch["image"].to(device="cuda")
+    #     labels = batch["label"].to(device="cuda")
+    #     text_input = batch["text_input"]#.to(device="cuda")
 
-        frames = frames.to(device="cuda")
-        labels = labels.to(device="cuda")
+    #     # frames = torch.permute(frames, (0,1,4,2,3))
 
-        frames = torch.permute(frames, (0,1,4,2,3))
+    #     print(frames.shape)
+    #     print(labels)
+    #     print(text_input)
 
-        print(frames.shape)
-        print(labels)
-
-        break
+    #     break

@@ -4,8 +4,10 @@ from database import DatabaseConnector
 
 
 if __name__ == "__main__":
-    db = DatabaseConnector()
-    rows = db.read_all_movies()
+    rows = []
+    for db_name in ["eduard_database.db", "vlad_database.db"]:
+        db = DatabaseConnector(db_name=db_name)
+        rows.extend(db.read_all_movies())
 
     df = pd.DataFrame(
         rows,

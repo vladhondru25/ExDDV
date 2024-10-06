@@ -2,10 +2,10 @@ import sqlite3
 
 
 class DatabaseConnector(object):
-    def __init__(self, cfg=None) -> None:
+    def __init__(self, cfg=None, db_name="my_database.db") -> None:
         # Create a connection to the SQLite database
         # If the database file does not exist, it will be created
-        self.connection = sqlite3.connect('my_database.db')
+        self.connection = sqlite3.connect(db_name)
 
         # Create a cursor object to execute SQL queries
         self.cursor = self.connection.cursor()
