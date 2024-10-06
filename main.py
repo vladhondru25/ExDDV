@@ -65,7 +65,6 @@ class VideoPlayerApp:
             self.root,
             text="Reveal/Hide Target Video",
             command=self.reveal_hide_video,
-            # state="normal" if self.dataset == "Farceforensics++" else "disabled"
         )
         self.reveal_button.grid(row=1, column=4, padx=10, pady=10)
 
@@ -180,6 +179,8 @@ class VideoPlayerApp:
         video_width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
         video_height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
         new_width, new_height = self.resize_to_fit_frame(video_width, video_height)
+        self.new_width = new_width
+        self.new_height = new_height
 
         self.frame_idx = 0
         while not self.stop_threads:
@@ -295,7 +296,7 @@ class VideoPlayerApp:
     def on_click(self, event):
         # Get the coordinates of the click relative to the Label
         x, y = event.x, event.y
-        self.click_locations[self.frame_idx] = {"x": x / self.width, "y": y / self.height}
+        self.click_locations[self.frame_idx] = {"x": x / self.new_width, "y": y / self.new_height}
 
     def close_db_connection(self):
         self.database_conn.close()
