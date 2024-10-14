@@ -7,12 +7,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from lavis.processors.blip_processors import (
-    BlipImageTrainProcessor,
-    Blip2ImageTrainProcessor,
-    BlipImageEvalProcessor,
-    BlipCaptionProcessor,
-)
+from lavis.processors.blip_processors import BlipCaptionProcessor
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -31,15 +26,15 @@ class ExplainableDataset(Dataset):
         )
         csv_data_fake["label"] = Label.FAKE.value
 
-        csv_data_real = csv_data_fake.copy()
-        csv_data_real["movie_name"] = csv_data_real["movie_name"].map(
-            lambda x: os.path.join("/media/vhondru/hdd/dp/original_data/original/data/original_sequences/youtube/c23/videos", x)
-        )
-        csv_data_real["text"] = "There is nothing unnormal in the video."
-        csv_data_real["label"] = Label.REAL.value
+        # csv_data_real = csv_data_fake.copy()
+        # csv_data_real["movie_name"] = csv_data_real["movie_name"].map(
+        #     lambda x: os.path.join("/media/vhondru/hdd/dp/original_data/original/data/original_sequences/youtube/c23/videos", x)
+        # )
+        # csv_data_real["text"] = "There is nothing unnormal in the video."
+        # csv_data_real["label"] = Label.REAL.value
 
-        self.csv_data = pd.concat((csv_data_fake, csv_data_real))
-        # self.csv_data = csv_data_fake
+        # self.csv_data = pd.concat((csv_data_fake, csv_data_real))
+        self.csv_data = csv_data_fake
 
 
         self.csv_data = self.csv_data.sample(frac=1, random_state=0).reset_index()
@@ -53,7 +48,7 @@ class ExplainableDataset(Dataset):
 
         self.csv_data.reset_index(inplace=True)
 
-        self.vis_processor = vis_processors if vis_processors != None else Blip2ImageTrainProcessor()
+        self.vis_processor = vis_processors
         self.text_processor = BlipCaptionProcessor()
 
     def __len__(self):

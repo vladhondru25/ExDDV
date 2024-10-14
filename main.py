@@ -250,6 +250,7 @@ class VideoPlayerApp:
 
             self.current_index += 1
             self.show_video_2 = False  # Hide the second video initially for the previous pair
+            self.selected_value.set(Difficulty.MEDIUM.value)
             self.load_videos()
 
     def show_previous(self):
@@ -258,6 +259,7 @@ class VideoPlayerApp:
 
             self.current_index -= 1
             self.show_video_2 = False  # Hide the second video initially for the previous pair
+            self.selected_value.set(Difficulty.MEDIUM.value) 
             self.load_videos()
 
     def reveal_hide_video(self):

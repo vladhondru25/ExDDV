@@ -102,12 +102,25 @@ class Blip2OPT(Blip2Base):
         self.prompt_length = prompt_tokens.attention_mask.sum(1)
         
         self._apply_lemmatizer = apply_lemmatizer
-        self._lemmatizer = None       
+        self._lemmatizer = None
+
+        self.use_classification = False
+        if self.use_classification:
+            self.classification_head = nn.Linear(in_features=768, out_features=1)
+
+            self.classification_loss = nn.BCEWithLogitsLoss()
 
     def forward(self, samples):
         image = samples["image"]
+
+        image_embeddings = []
         with self.maybe_autocast():
-            image_embeds = self.ln_vision(self.visual_encoder(image))
+            for i in range(5):
+                image_embeddings.append(self.ln_vision(self.visual_encoder(image[:,i,:,:,:])))
+
+        image_embeds = image_embeddings[0] + image_embeddings[1] + image_embeddings[2] + image_embeddings[3] + image_embeddings[4]
+        image_embeds = image_embeds / 5.0
+
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
             image.device
         )
@@ -119,6 +132,13 @@ class Blip2OPT(Blip2Base):
             encoder_attention_mask=image_atts,
             return_dict=True,
         )
+
+        classification_loss = None
+        if self.use_classification:
+            classification_logit = query_output.last_hidden_state.mean(dim=1)
+            classification_logit = self.classification_head(classification_logit)
+
+            classification_loss = self.classification_loss(classification_logit, samples["label"].unsqueeze(1))
 
         inputs_opt = self.opt_proj(query_output.last_hidden_state)
         atts_opt = torch.ones(inputs_opt.size()[:-1], dtype=torch.long).to(image.device)
@@ -159,7 +179,10 @@ class Blip2OPT(Blip2Base):
             )
         loss = outputs.loss
 
-        return {"loss": loss}
+        if classification_loss:
+            return {"loss": loss + 0.1*classification_loss, "llm_loss": loss, "classification_loss": classification_loss}
+        else:
+            return {"loss": loss}
 
     @torch.no_grad()
     def generate(
@@ -190,8 +213,15 @@ class Blip2OPT(Blip2Base):
             captions (list): A list of strings of length batch_size * num_captions.
         """
         image = samples["image"]
+
+        image_embeddings = []
         with self.maybe_autocast():
-            image_embeds = self.ln_vision(self.visual_encoder(image))
+            for i in range(5):
+                image_embeddings.append(self.ln_vision(self.visual_encoder(image[:,i,:,:,:])))
+
+            image_embeds = image_embeddings[0] + image_embeddings[1] + image_embeddings[2] + image_embeddings[3] + image_embeddings[4]
+            image_embeds = image_embeds / 5.0
+
             image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
                 image.device
             )
@@ -403,6 +433,7 @@ class Blip2OPT(Blip2Base):
         freeze_vit = cfg.get("freeze_vit", True)
 
         prompt = cfg.get("prompt", "")
+        prompt = ""
         max_txt_len = cfg.get("max_txt_len", 32)
         
         apply_lemmatizer = cfg.get("apply_lemmatizer", False)

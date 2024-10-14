@@ -23,6 +23,10 @@ from lavis.common.optims import (
 )
 from lavis.common.registry import registry
 from lavis.common.utils import now
+from lavis.processors.blip_processors import (
+    Blip2ImageTrainProcessor,
+    BlipImageEvalProcessor
+)
 
 # imports modules for registration
 from lavis.datasets.builders import *
@@ -30,6 +34,10 @@ from lavis.models import *
 from lavis.processors import *
 from lavis.runners import *
 from lavis.tasks import *
+
+import sys
+sys.path.append("..")
+from dataset import ExplainableDataset
 
 
 def parse_args():
@@ -90,7 +98,16 @@ def main():
     cfg.pretty_print()
 
     task = tasks.setup_task(cfg)
-    datasets = task.build_datasets(cfg)
+
+    # datasets = task.build_datasets(cfg)
+    datasets = {
+        "xAI": {
+            "train": ExplainableDataset("train", Blip2ImageTrainProcessor()),
+            "val": ExplainableDataset("val", BlipImageEvalProcessor(image_size=364)),
+            # "test": ExplainableDataset("test"),
+        }
+    }
+
     model = task.build_model(cfg)
 
     runner = get_runner_class(cfg)(

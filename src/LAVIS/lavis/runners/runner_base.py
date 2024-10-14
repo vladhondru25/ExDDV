@@ -419,15 +419,15 @@ class RunnerBase:
             if self.save_freq>0 and cur_epoch%self.save_freq == 0:
                 self._save_checkpoint(cur_epoch, is_best=False)
 
-            dist.barrier()
+            # dist.barrier()
 
         # save last checkpoint
         if self.save_last and not self.evaluate_only:
             self._save_checkpoint(cur_epoch, is_best=False)
 
         # testing phase
-        test_epoch = "best" if len(self.valid_splits) > 0 else cur_epoch
-        self.evaluate(cur_epoch=test_epoch, skip_reload=self.evaluate_only)
+        # test_epoch = "best" if len(self.valid_splits) > 0 else cur_epoch
+        # self.evaluate(cur_epoch=test_epoch, skip_reload=self.evaluate_only)
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -615,7 +615,11 @@ class RunnerBase:
         """
         Load the best checkpoint for evaluation.
         """
-        checkpoint_path = os.path.join(self.output_dir, "checkpoint_best.pth")
+        # checkpoint_path = os.path.join(self.output_dir, "checkpoint_best.pth")
+        checkpoint_names = os.listdir(self.output_dir)
+        checkpoint_names = [ckpt_name for ckpt_name in checkpoint_names if ckpt_name[-4:] == ".pth"]
+        checkpoint_names.sort()
+        checkpoint_path = os.path.join(self.output_dir, checkpoint_names[-1])
 
         logging.info("Loading checkpoint from {}.".format(checkpoint_path))
         checkpoint = torch.load(checkpoint_path, map_location="cpu")

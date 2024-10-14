@@ -130,14 +130,16 @@ class CaptionTask(BaseTask):
             remove_duplicate="image_id",
         )
 
-        if self.report_metric:
-            metrics = self._report_metrics(
-                eval_result_file=eval_result_file, split_name=split_name
-            )
-        else:
-            metrics = {"agg_metrics": 0.0}
+        # if self.report_metric:
+        #     metrics = self._report_metrics(
+        #         eval_result_file=eval_result_file, split_name=split_name
+        #     )
+        # else:
+        #     metrics = {"agg_metrics": 0.0}
+        
+        # return metrics
 
-        return metrics
+        return {"agg_metrics": 0.0}
 
     @main_process
     def _report_metrics(self, eval_result_file, split_name):
