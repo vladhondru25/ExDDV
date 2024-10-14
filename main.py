@@ -183,12 +183,20 @@ class VideoPlayerApp:
         self.new_height = new_height
 
         self.frame_idx = 0
-        while not self.stop_threads:
+
+        def update_frame():
+            if self.stop_threads:
+                cap1.release()
+                cap2.release()
+                return  # Stop updating if the thread is stopped
+
             ret1, frame1 = cap1.read()
             ret2, frame2 = cap2.read()
 
-            if not ret1 or not ret2 or self.stop_threads:
-                break  # End of video or stop signal received
+            if not ret1 or not ret2:
+                cap1.release()
+                cap2.release()
+                return  # End of video
 
             # Resize frames to fit the labels
             frame1 = cv2.resize(frame1, (new_width, new_height))
@@ -196,11 +204,11 @@ class VideoPlayerApp:
                 frame2 = cv2.resize(frame2, (new_width, new_height))
             else:
                 frame2 = np.zeros((new_height, new_width, 3), dtype=np.uint8)
-
+                
             # Convert frames to RGB format (Tkinter uses RGB, OpenCV uses BGR)
             frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
             frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
-
+            
             # Convert the frames to PIL Images, then to Tkinter PhotoImages
             img1 = Image.fromarray(frame1)
             img2 = Image.fromarray(frame2)
@@ -215,13 +223,14 @@ class VideoPlayerApp:
             self.video_label_2.imgtk = imgtk2  # Prevent garbage collection
             self.video_label_2.config(image=imgtk2)
 
-            # Wait for the next frame, based on the synchronized frame rate
-            time.sleep(delay / 1000.0)
-
             self.frame_idx += 1
 
-        cap1.release()
-        cap2.release()
+            # Schedule the next frame update
+            self.root.after(delay, update_frame)
+
+        # Start the frame updates
+        self.root.after(delay, update_frame)
+
 
     def resize_to_fit_frame(self, video_width, video_height):
         """ Function to scale video while maintaining aspect ratio """
