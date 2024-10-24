@@ -97,8 +97,6 @@ class VideoPlayerApp:
         self.video_running = False
         self._job = None
 
-        self.repeat_idx = 0
-
         # Load the initial video pair
         self.load_videos()
 
@@ -163,7 +161,7 @@ class VideoPlayerApp:
             self.root.after_cancel(self._job)
             self._job = None
 
-    def update_frame(self, repeat_idx):
+    def update_frame(self):
         if not self.video_running:
             return
 
@@ -200,7 +198,7 @@ class VideoPlayerApp:
 
             # Schedule the next frame update
             if self.video_running:
-                self._job = self.root.after(self.delay, lambda: self.update_frame(repeat_idx))
+                self._job = self.root.after(self.delay, self.update_frame)
 
     def play_videos(self, video_path_1, video_path_2):
         self.cap1 = cv2.VideoCapture(video_path_1)
@@ -222,7 +220,7 @@ class VideoPlayerApp:
 
         # Start the frame updates
         self.video_running = True
-        self._job = self.root.after(self.delay, lambda: self.update_frame(self.repeat_idx))
+        self._job = self.root.after(self.delay, self.update_frame)
 
         self.root.bind("<Destroy>", lambda e: (self.cap1.release(), self.cap2.release()))
 
@@ -245,7 +243,6 @@ class VideoPlayerApp:
         return new_width, new_height
 
     def restart_video(self):
-        self.repeat_idx += 1
         self.load_videos()
 
     def show_next(self):
