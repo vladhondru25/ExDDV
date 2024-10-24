@@ -40,6 +40,8 @@ class DatabaseConnector(object):
         self.insert_query = "INSERT INTO annotations (user, video_name, text, dataset, manipulation, click_locations, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?)"
         self.select_query = "SELECT video_name FROM annotations WHERE user = '{}'"
 
+        self.select_all_query = "SELECT * FROM annotations"
+
     def add_row(self, user, video_name, text, dataset, manipulation, click_locations, difficulty):
         self.cursor.execute(self.insert_query, (user, video_name, text, dataset, manipulation, click_locations, difficulty))
         self.connection.commit()

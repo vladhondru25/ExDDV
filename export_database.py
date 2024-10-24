@@ -1,17 +1,26 @@
+import os
+
 import pandas as pd
 
 from database import DatabaseConnector
 
 
+DATABASES_INPUT_PATH = "/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/databases"
+
+
 if __name__ == "__main__":
     rows = []
-    for db_name in ["eduard_database.db", "vlad_database.db"]:
-        db = DatabaseConnector(db_name=db_name)
+    for db_name in os.listdir(DATABASES_INPUT_PATH):
+        db = DatabaseConnector(db_name=os.path.join(DATABASES_INPUT_PATH,db_name))
         rows.extend(db.read_all_movies())
 
     df = pd.DataFrame(
         rows,
-        columns=["id", "username", "movie_name", "text", "dataset", "manipulation", "click_locations"]
+        columns=["id", "username", "movie_name", "text", "dataset", "manipulation", "click_locations", "difficulty"]
     )
 
-    df.to_csv("dataset.csv", encoding='utf-8', index=False)
+    print(f'Before: {len(df)}')
+    df = df[df.click_locations != r"{}"]
+    print(f'After: {len(df)}')
+
+    df.to_csv("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/dataset.csv", encoding='utf-8', index=False)

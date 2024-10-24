@@ -1,7 +1,6 @@
 import configparser
 import json
 import os
-import threading
 import time
 import signal
 from PIL import Image, ImageTk
@@ -13,6 +12,8 @@ from tkinter import Label, Button, messagebox
 
 from database import DatabaseConnector, Difficulty
 from utils import on_ctrl_c_signal, cleanup_and_exit
+
+DATABASE_NAME = "my_database3.db"
 
 
 class VideoPlayerApp:
@@ -29,7 +30,7 @@ class VideoPlayerApp:
         self.username = self.cfg["USER_DATA"]["USERNAME"]
 
         # Dabase connector
-        self.database_conn = DatabaseConnector(self.cfg)
+        self.database_conn = DatabaseConnector(self.cfg, DATABASE_NAME)
 
         self.width = 600
         self.height = 500
@@ -93,8 +94,10 @@ class VideoPlayerApp:
         self.radio3.grid(row=2, column=4, padx=(150,0), pady=10)
 
         # Flags to control video threads
-        self.stop_threads = False
-        self.thread = None
+        self.video_running = False
+        self._job = None
+
+        self.repeat_idx = 0
 
         # Load the initial video pair
         self.load_videos()
@@ -152,58 +155,28 @@ class VideoPlayerApp:
         self.stop_current_videos()
 
         # Start the thread to play the new videos
-        self.stop_threads = False
-        self.thread = threading.Thread(target=self.play_videos, args=(source_video, target_video))
-        self.thread.start()
+        self.play_videos(source_video, target_video)
 
     def stop_current_videos(self):
-        # Signal the threads to stop
-        self.stop_threads = True
+        self.video_running = False
+        if self._job != None:
+            self.root.after_cancel(self._job)
+            self._job = None
 
-        # Join the threads to ensure they have stopped before loading new videos
-        if self.thread is not None:
-            self.thread.join()
+    def update_frame(self, repeat_idx):
+        if not self.video_running:
+            return
 
-        self.thread = None
+        ret1, frame1 = self.cap1.read()
+        ret2, frame2 = self.cap2.read()
 
-    def play_videos(self, video_path_1, video_path_2):
-        cap1 = cv2.VideoCapture(video_path_1)
-        cap2 = cv2.VideoCapture(video_path_2)
-        
-        # Determine the frame rate to sync the playback
-        fps1 = cap1.get(cv2.CAP_PROP_FPS) or 24  # Default to 30 FPS if FPS is not available
-        fps2 = cap2.get(cv2.CAP_PROP_FPS) or 24
-        sync_fps = min(fps1, fps2)  # Sync both videos to the slower frame rate
-        delay = int(1000 / sync_fps)  # Delay in milliseconds between frames
-
-        video_width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
-        video_height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        new_width, new_height = self.resize_to_fit_frame(video_width, video_height)
-        self.new_width = new_width
-        self.new_height = new_height
-
-        self.frame_idx = 0
-
-        def update_frame():
-            if self.stop_threads:
-                cap1.release()
-                cap2.release()
-                return  # Stop updating if the thread is stopped
-
-            ret1, frame1 = cap1.read()
-            ret2, frame2 = cap2.read()
-
-            if not ret1 or not ret2:
-                cap1.release()
-                cap2.release()
-                return  # End of video
-
+        if ret1 and ret2:
             # Resize frames to fit the labels
-            frame1 = cv2.resize(frame1, (new_width, new_height))
+            frame1 = cv2.resize(frame1, (self.new_width, self.new_height))
             if self.show_video_2:
-                frame2 = cv2.resize(frame2, (new_width, new_height))
+                frame2 = cv2.resize(frame2, (self.new_width, self.new_height))
             else:
-                frame2 = np.zeros((new_height, new_width, 3), dtype=np.uint8)
+                frame2 = np.zeros((self.new_height, self.new_width, 3), dtype=np.uint8)
                 
             # Convert frames to RGB format (Tkinter uses RGB, OpenCV uses BGR)
             frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
@@ -226,11 +199,32 @@ class VideoPlayerApp:
             self.frame_idx += 1
 
             # Schedule the next frame update
-            self.root.after(delay, update_frame)
+            if self.video_running:
+                self._job = self.root.after(self.delay, lambda: self.update_frame(repeat_idx))
+
+    def play_videos(self, video_path_1, video_path_2):
+        self.cap1 = cv2.VideoCapture(video_path_1)
+        self.cap2 = cv2.VideoCapture(video_path_2)
+        
+        # Determine the frame rate to sync the playback
+        fps1 = self.cap1.get(cv2.CAP_PROP_FPS) or 24  # Default to 30 FPS if FPS is not available
+        fps2 = self.cap2.get(cv2.CAP_PROP_FPS) or 24
+        sync_fps = min(fps1, fps2)  # Sync both videos to the slower frame rate
+        self.delay = int(1000 / sync_fps)  # Delay in milliseconds between frames
+
+        video_width = int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+        video_height = int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        new_width, new_height = self.resize_to_fit_frame(video_width, video_height)
+        self.new_width = new_width
+        self.new_height = new_height
+
+        self.frame_idx = 0
 
         # Start the frame updates
-        self.root.after(delay, update_frame)
+        self.video_running = True
+        self._job = self.root.after(self.delay, lambda: self.update_frame(self.repeat_idx))
 
+        self.root.bind("<Destroy>", lambda e: (self.cap1.release(), self.cap2.release()))
 
     def resize_to_fit_frame(self, video_width, video_height):
         """ Function to scale video while maintaining aspect ratio """
@@ -251,6 +245,7 @@ class VideoPlayerApp:
         return new_width, new_height
 
     def restart_video(self):
+        self.repeat_idx += 1
         self.load_videos()
 
     def show_next(self):
@@ -279,9 +274,6 @@ class VideoPlayerApp:
         # Retrieve the text from the text box
         text = self.text_box.get("1.0", tk.END).strip()
 
-        # In a real application, you would send the text to a server, database, etc.
-        # For this example, we'll just print it to the console
-        # print(f"Text submitted: {text}")
         movie_path = self.video_pairs[self.current_index][0]
         movie_path_head, movie_name_db = os.path.split(movie_path)
         _, manipulation_folder = os.path.split(movie_path_head)
