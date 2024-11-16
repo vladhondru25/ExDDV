@@ -7,8 +7,18 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from lavis.processors.blip_processors import BlipCaptionProcessor
 from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+
+from lavis.processors.blip_processors import (
+    BlipCaptionProcessor,
+    BlipImageEvalProcessor,
+    Blip2ImageTrainProcessor
+)
+
+
+FACEFORENSINCS_PATH = "/media/vhondru/hdd/dp/manipulated_videos"
+DEEPFAKECHALLENGE_PATH = "/media/vhondru/hdd/deepfake_dataset_challenge"
 
 
 class Label(Enum):
@@ -21,9 +31,7 @@ HEIGHT = 400
 class ExplainableDataset(Dataset):
     def __init__(self, split, vis_processors=None) -> None:
         csv_data_fake = pd.read_csv("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/dataset.csv")
-        csv_data_fake["movie_name"] = csv_data_fake["movie_name"].map(
-            lambda x: os.path.join("/media/vhondru/hdd/dp/manipulated_videos/end_to_end", x)
-        )
+        csv_data_fake["movie_name"] = csv_data_fake.apply(self._obtain_path, axis=1)
         csv_data_fake["label"] = Label.FAKE.value
 
         # csv_data_real = csv_data_fake.copy()
@@ -51,6 +59,18 @@ class ExplainableDataset(Dataset):
         self.vis_processor = vis_processors
         self.text_processor = BlipCaptionProcessor()
 
+        self.counter = 0
+        self.users = {"Vlad Hondru": 0, "Eduard Hogea": 0}
+
+    def get_img_ids(self):
+        return self.csv_data["id"].to_list()
+
+    def _obtain_path(self, row):
+        if row["dataset"] == "Farceforensics++":
+            return os.path.join(FACEFORENSINCS_PATH, row["manipulation"], row["movie_name"])
+        elif row["dataset"] == "DeepfakeDetection":
+            return os.path.join(DEEPFAKECHALLENGE_PATH, row["manipulation"], row["movie_name"])
+
     def __len__(self):
         return len(self.csv_data)
     
@@ -77,7 +97,7 @@ class ExplainableDataset(Dataset):
         text = video_metadata["text"]
         click_locations = video_metadata["click_locations"]
         label = video_metadata["label"]
-        image_id = 0 # TODO
+        image_id = video_metadata["id"]
 
         cap = cv2.VideoCapture(movie_name)
         movie_no_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -86,25 +106,31 @@ class ExplainableDataset(Dataset):
         frames_indices = frames_indices.astype(int)
 
         # Use frames on clicked locations if they exist
-        if click_locations != "{}":
-            click_locations = json.loads(click_locations)
+        # if click_locations != "{}":
+        #     click_locations = json.loads(click_locations)
 
-            frames_with_click = list(click_locations.keys())
-            frames_with_click = list(map(int, frames_with_click))
-            frames_with_click.sort()
+        #     frames_with_click = list(click_locations.keys())
+        #     frames_with_click = list(map(int, frames_with_click))
+        #     frames_with_click.sort()
 
-            i = 0
-            while len(frames_indices) - len(frames_with_click) > 0:
-                if i % 2 == 0 and frames_indices[-i-1] not in frames_with_click:
-                    frames_with_click.append(frames_indices[-i-1])
-                elif i % 2 != 0 and frames_indices[i] not in frames_with_click:
-                    frames_with_click.append(frames_indices[i])
+        #     # Debug
+        #     # max_frame_no = max(frames_with_click)
+        #     # if max_frame_no > movie_no_frames:
+        #     #     self.counter += 1
+        #     #     self.users[video_metadata["username"]] += 1
 
-                i = i + 1
+        #     i = 0
+        #     while len(frames_indices) - len(frames_with_click) > 0:
+        #         if i % 2 == 0 and frames_indices[-i-1] not in frames_with_click:
+        #             frames_with_click.append(frames_indices[-i-1])
+        #         elif i % 2 != 0 and frames_indices[i] not in frames_with_click:
+        #             frames_with_click.append(frames_indices[i])
 
-            frames_indices = sorted(frames_with_click)
+        #         i = i + 1
 
-            frames_indices = list(map(int, frames_indices))
+        #     frames_indices = sorted(frames_with_click)
+
+        #     frames_indices = list(map(int, frames_indices))
 
         frames = []
         for frame_ind in frames_indices[:INPUT_NO_OF_FRAMES]:
@@ -124,17 +150,47 @@ class ExplainableDataset(Dataset):
 
             frames.append(frame)
 
+        # Read attention map
+        att_map_path = movie_name.replace(video_metadata["manipulation"], f"attention_maps_{video_metadata['manipulation']}2")
+        att_map_path = att_map_path.replace(att_map_path[-3:], "png")
+        attention_map = np.array(Image.open(att_map_path)) / 255.0
+
         text_input = self.text_processor(text)
     
-        return {"image": torch.stack(frames), "label": torch.tensor(label), "text_input": text_input, "image_id": image_id}
+        return {
+            "image": torch.stack(frames),
+            "label": torch.tensor(label),
+            "text_input": text_input,
+            "image_id": image_id, 
+            "attention_map": torch.tensor(attention_map),
+        }
 
 
 if __name__ == "__main__":
-    ds = ExplainableDataset("train")
-    print(ds[0])
-    # dl = DataLoader(ds, batch_size=8, shuffle=True, num_workers=8, pin_memory=True)
+    """
+    ds = ExplainableDataset("train", Blip2ImageTrainProcessor())
+    # ds = ExplainableDataset("val", BlipImageEvalProcessor(image_size=364)),
 
-    # for batch in dl:
+    dl = DataLoader(ds, batch_size=8, shuffle=True, num_workers=0, pin_memory=True)
+
+    for batch in tqdm(dl):
+        continue
+
+    print(ds.counter)
+    print(ds.users)
+    """
+
+    # ds = ExplainableDataset("train", Blip2ImageTrainProcessor())
+    ds2 = ExplainableDataset("val", BlipImageEvalProcessor(image_size=364))
+
+    dl2 = DataLoader(ds2, batch_size=8, shuffle=True, num_workers=0, pin_memory=True, collate_fn=ds2.collater)
+
+    for batch in tqdm(dl2):
+        continue
+
+    print(ds2.counter)
+    print(ds2.users)
+
     #     frames = batch["image"].to(device="cuda")
     #     labels = batch["label"].to(device="cuda")
     #     text_input = batch["text_input"]#.to(device="cuda")
