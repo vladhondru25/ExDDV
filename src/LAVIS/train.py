@@ -102,11 +102,12 @@ def main():
     # datasets = task.build_datasets(cfg)
     datasets = {
         "xAI": {
-            "train": ExplainableDataset("train", Blip2ImageTrainProcessor()),
-            "val": ExplainableDataset("val", BlipImageEvalProcessor(image_size=364)),
+            "train": ExplainableDataset("train", Blip2ImageTrainProcessor(image_size=224)),
+            "val": ExplainableDataset("val", BlipImageEvalProcessor(image_size=224)),
             # "test": ExplainableDataset("test"),
         }
     }
+    task.img_ids = datasets["xAI"]["val"].get_img_ids()
 
     model = task.build_model(cfg)
 

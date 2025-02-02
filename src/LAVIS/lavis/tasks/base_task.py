@@ -8,6 +8,7 @@
 import logging
 import os
 
+import matplotlib.pyplot as plt
 import torch
 import torch.distributed as dist
 from lavis.common.dist_utils import get_rank, get_world_size, is_main_process, is_dist_avail_and_initialized
@@ -65,7 +66,7 @@ class BaseTask:
         for k,v in output.items():
             if "loss" in k:
                 loss_dict[k] = v
-        return output["loss"], loss_dict
+        return output["loss"], loss_dict, output["attention_map"]
 
     def valid_step(self, model, samples):
         raise NotImplementedError
@@ -82,8 +83,9 @@ class BaseTask:
     def inference_step(self):
         raise NotImplementedError
 
-    def evaluation(self, model, data_loader, cuda_enabled=True):
+    def evaluation(self, model, data_loader, cuda_enabled=True, epoch=0):
         metric_logger = MetricLogger(delimiter="  ")
+        # metric_logger.add_meter("loss_attention", SmoothedValue(window_size=1, fmt="{value:.4f}"))
         header = "Evaluation"
         # TODO make it configurable
         print_freq = 10
@@ -94,6 +96,18 @@ class BaseTask:
             samples = prepare_sample(samples, cuda_enabled=cuda_enabled)
 
             eval_output = self.valid_step(model=model, samples=samples)
+
+            attention_map = [eo.pop("attention_map") for eo in eval_output]
+            attention_map = torch.stack(attention_map)
+            if len(results) == 0:
+                self.save_attention_maps(
+                    samples["attention_map"].cpu(),
+                    attention_map.cpu(),
+                    registry.get_path("result_dir").replace("/result",""),
+                    epoch,
+                    "val"
+                )
+
             results.extend(eval_output)
 
         if is_dist_avail_and_initialized():
@@ -223,8 +237,17 @@ class BaseTask:
             lr_scheduler.step(cur_epoch=inner_epoch, cur_step=i)
 
             with torch.cuda.amp.autocast(enabled=use_amp):
-                loss, loss_dict = self.train_step(model=model, samples=samples)
+                loss, loss_dict, attention_map = self.train_step(model=model, samples=samples)
                 loss /= accum_grad_iters #TODO: not affect loss_dict values for logging
+            
+            if i == 0:
+                self.save_attention_maps(
+                    samples["attention_map"].cpu(),
+                    attention_map.cpu(),
+                    registry.get_path("result_dir").replace("/result",""),
+                    epoch,
+                    "train"
+                )
 
             # after_train_step()
             if use_amp:
@@ -252,6 +275,32 @@ class BaseTask:
             k: "{:.3f}".format(meter.global_avg)
             for k, meter in metric_logger.meters.items()
         }
+    
+    def save_attention_maps(self, attention_map_gt, attention_map_pred, output_path, epoch, split):
+        attention_map_pred = torch.nn.functional.sigmoid(attention_map_pred.detach())
+
+        f, axarr = plt.subplots(8,4, figsize=(12,12), constrained_layout=True)
+        f.tight_layout()
+        plt.subplots_adjust(left=0.1, right=1.0, top=2.0, bottom=0.1, wspace=0.1, hspace=0.1)
+
+        for i in range(8):
+            for j in range(4):
+                axarr[i,j].axis("off")
+
+        for i in range(8):
+            axarr[i,0].imshow(attention_map_gt[i])
+            axarr[i,1].imshow(attention_map_pred[i])
+
+            axarr[i,2].imshow(attention_map_gt[i+8])
+            axarr[i,3].imshow(attention_map_pred[i+8])
+
+        axarr[0, 0].set_title("Ground-truth")
+        axarr[0, 1].set_title("Prediction")
+        axarr[0, 2].set_title("Ground-truth")
+        axarr[0, 3].set_title("Prediction")
+
+        plt.savefig(os.path.join(output_path, f"attention_results_epoch{epoch}_{split}.png"), bbox_inches = 'tight')
+
 
     @staticmethod
     def save_result(result, result_dir, filename, remove_duplicate=""):

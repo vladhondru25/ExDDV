@@ -2,3 +2,9 @@ __pycache__/
 *.venv
 *.db
 *.csv
+wandb/
+*.pt
+*.pkl
+*.caffemodel
+
+src/keypoints_dataset/

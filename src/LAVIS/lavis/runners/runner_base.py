@@ -275,7 +275,7 @@ class RunnerBase:
     
     @property
     def save_freq(self):
-        save_freq = self.config.run_cfg.get("save_freq", 5)
+        save_freq = self.config.run_cfg.get("save_freq", 1)
         return int(save_freq)
 
     @property
@@ -398,13 +398,13 @@ class RunnerBase:
                                 "agg_metrics" in val_log
                             ), "No agg_metrics found in validation log."
 
-                            agg_metrics = val_log["agg_metrics"]
-                            if agg_metrics > best_agg_metric and split_name == "val":
-                                best_epoch, best_agg_metric = cur_epoch, agg_metrics
-                                if not self.evaluate_only:
-                                    self._save_checkpoint(cur_epoch, is_best=True)
+                            # agg_metrics = val_log["agg_metrics"]
+                            # if agg_metrics > best_agg_metric and split_name == "val":
+                            #     best_epoch, best_agg_metric = cur_epoch, agg_metrics
+                            #     if not self.evaluate_only:
+                            #         self._save_checkpoint(cur_epoch, is_best=True)
 
-                            val_log.update({"best_epoch": best_epoch})
+                            # val_log.update({"best_epoch": best_epoch})
                             self.log_stats(val_log, split_name)
 
             else:
@@ -486,7 +486,7 @@ class RunnerBase:
             model=model,
             dataset=self.datasets[split_name],
         )
-        results = self.task.evaluation(model, data_loader)
+        results = self.task.evaluation(model, data_loader, epoch=cur_epoch)
 
         if results is not None:
             return self.task.after_evaluation(
@@ -609,7 +609,7 @@ class RunnerBase:
             "checkpoint_{}.pth".format("best" if is_best else cur_epoch),
         )
         logging.info("Saving checkpoint at epoch {} to {}.".format(cur_epoch, save_to))
-        torch.save(save_obj, save_to)
+        # torch.save(save_obj, save_to)
 
     def _reload_best_model(self, model):
         """

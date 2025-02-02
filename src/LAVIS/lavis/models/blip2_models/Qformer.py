@@ -14,6 +14,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any
 
+from einops import rearrange
 import torch
 from torch import Tensor, device, dtype, nn
 import torch.utils.checkpoint
@@ -492,6 +493,30 @@ class BertEncoder(nn.Module):
             [BertLayer(config, i) for i in range(config.num_hidden_layers)]
         )
 
+        self.attention_map = nn.Sequential(
+            nn.Conv2d(in_channels=1408, out_channels=256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=256, out_channels=1, kernel_size=1),
+        )
+        # self.encoder = nn.Sequential(
+        #     nn.Conv2d(in_channels=1408, out_channels=256, kernel_size=3, padding=0),
+        #     nn.MaxPool2d(kernel_size=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(in_channels=256, out_channels=32, kernel_size=3, padding=0),
+        #     nn.ReLU()
+        # )
+        # self.bottleneck = nn.Sequential(
+        #     nn.Linear(in_features=3200, out_features=1024),
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=1024, out_features=5408),
+        #     nn.ReLU()
+        # )
+        # self.decoder = nn.Sequential(
+        #     nn.ConvTranspose2d(in_channels=32, out_channels=64, kernel_size=2, stride=2),
+        #     nn.LeakyReLU(),
+        #     nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1, padding=0),
+        # )
+
     def forward(
         self,
         hidden_states,
@@ -514,6 +539,10 @@ class BertEncoder(nn.Module):
 
         next_decoder_cache = () if use_cache else None
 
+        # IDX_LAYER = [2,4,6,8]
+        IDX_LAYER = [2,3,4,5]
+        # IDX_LAYER = []
+        attention_map = None
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
             if output_hidden_states:
@@ -521,6 +550,26 @@ class BertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
+
+            new_encoder_hidden_states = None
+            if i in IDX_LAYER:
+                # temp_encoder_hidden_states = rearrange(encoder_hidden_states[:, 1:, :], 'b (l1 l2) d -> b d l1 l2', l1=26, l2=26)
+                temp_encoder_hidden_states = rearrange(encoder_hidden_states[:, 1:, :], 'b (l1 l2) d -> b d l1 l2', l1=16, l2=16)
+                # Method 1
+                attention_map = self.attention_map(temp_encoder_hidden_states)
+                # Method 2
+                # attention_map = self.encoder(temp_encoder_hidden_states)
+                # attention_map = attention_map.reshape(len(attention_map), -1)
+                # attention_map = self.bottleneck(attention_map)
+                # attention_map = attention_map.reshape(len(attention_map), 32, 13, 13)
+                # attention_map = self.decoder(attention_map)
+
+                # Astea doua
+                new_encoder_hidden_states = encoder_hidden_states[:, 1:, :] * \
+                    F.sigmoid(rearrange(attention_map, "b c l1 l2 -> b (l1 l2) c"))
+                
+                new_encoder_hidden_states = torch.concat((encoder_hidden_states[:,0:1,:],new_encoder_hidden_states), dim=1)
+
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
@@ -551,7 +600,7 @@ class BertEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
+                    new_encoder_hidden_states if new_encoder_hidden_states is not None else encoder_hidden_states,
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
@@ -577,6 +626,7 @@ class BertEncoder(nn.Module):
                     all_hidden_states,
                     all_self_attentions,
                     all_cross_attentions,
+                    attention_map
                 ]
                 if v is not None
             )
@@ -586,6 +636,7 @@ class BertEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
+            attention_map=attention_map
         )
 
 
@@ -962,6 +1013,7 @@ class BertModel(BertPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
+            attention_map=encoder_outputs[1],
         )
 
 

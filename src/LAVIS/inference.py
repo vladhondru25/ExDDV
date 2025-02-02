@@ -12,6 +12,7 @@ sys.path.append("..")
 from dataset import ExplainableDataset
 from lavis.common.dist_utils import get_rank
 from lavis.models import load_model_and_preprocess
+from lavis.processors.blip_processors import BlipImageEvalProcessor
 from scipy import spatial
 from sentence_transformers import SentenceTransformer
 
@@ -32,9 +33,10 @@ def main():
     # loads BLIP-2 pre-trained model
     model, vis_processors, _ = load_model_and_preprocess(name="blip2_opt", model_type="caption_coco_opt2.7b", is_eval=True, device="cuda")
 
-    model_path = "/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/src/LAVIS/lavis/output/BLIP2/Caption_xAI/20241011103/checkpoint_30.pth"
+    model_path = "/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/src/LAVIS/lavis/output/BLIP2/Caption_xAI/20241027144/checkpoint_3.pth"
     model_obj = torch.load(model_path)
     model.load_state_dict(model_obj["model"], strict=False)
+    model.eval()
 
     """
     input_movie_path = "/media/vhondru/hdd/dp/manipulated_videos/end_to_end/741_M010.mp4"
@@ -66,12 +68,23 @@ def main():
 
     ground_truth = []
     predicted = []
-    val_dataset = ExplainableDataset(split="val", vis_processors=vis_processors["eval"])
+    val_dataset = ExplainableDataset(split="val", vis_processors=BlipImageEvalProcessor(image_size=364))
     for i in tqdm.tqdm(range(len(val_dataset))):
         sample = val_dataset[i]
         image = sample["image"].to("cuda")
 
-        answer = model.generate({"image": image.unsqueeze(0)})
+        with torch.no_grad():
+            answer = model.generate(
+                {"image": image.unsqueeze(0)},
+                use_nucleus_sampling=False,
+                num_beams=5,
+                max_length=32,
+                min_length=4,
+                repetition_penalty=1.15,
+                length_penalty=0,
+                top_p=0.9,
+                temperature=1,
+            )
 
         ground_truth.append(sample["text_input"])
         predicted.extend(answer)

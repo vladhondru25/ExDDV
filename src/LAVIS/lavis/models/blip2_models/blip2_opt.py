@@ -110,22 +110,27 @@ class Blip2OPT(Blip2Base):
 
             self.classification_loss = nn.BCEWithLogitsLoss()
 
+        self.use_attention = True
+        self.attention_loss = nn.BCEWithLogitsLoss()
+        # self.attention_loss = nn.MSELoss()
+
+
     def forward(self, samples):
         image = samples["image"]
 
         image_embeddings = []
         with self.maybe_autocast():
             for i in range(5):
-                image_embeddings.append(self.ln_vision(self.visual_encoder(image[:,i,:,:,:])))
+                image_embeddings.append(self.visual_encoder(image[:,i,:,:,:]))
 
         image_embeds = image_embeddings[0] + image_embeddings[1] + image_embeddings[2] + image_embeddings[3] + image_embeddings[4]
-        image_embeds = image_embeds / 5.0
+        image_embeds = self.ln_vision(image_embeds / 5.0) # torch.Size([16, 677, 1408])
 
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
             image.device
         )
 
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1) # torch.Size([16, 32, 768])
         query_output = self.Qformer.bert(
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
@@ -133,7 +138,6 @@ class Blip2OPT(Blip2Base):
             return_dict=True,
         )
 
-        classification_loss = None
         if self.use_classification:
             classification_logit = query_output.last_hidden_state.mean(dim=1)
             classification_logit = self.classification_head(classification_logit)
@@ -179,10 +183,26 @@ class Blip2OPT(Blip2Base):
             )
         loss = outputs.loss
 
-        if classification_loss:
-            return {"loss": loss + 0.1*classification_loss, "llm_loss": loss, "classification_loss": classification_loss}
-        else:
-            return {"loss": loss}
+        # Compute auxiliary losses
+        llm_loss = loss.clone().detach()
+        result_dict = {"llm_loss": llm_loss}
+
+        if self.use_classification:
+            loss = loss + 0.1*classification_loss
+            result_dict["classification_loss"] = classification_loss
+
+        if self.use_attention:
+            # attention_map_pred = nn.functional.sigmoid(query_output.attention_map.squeeze(1))
+            attention_map_pred = query_output.attention_map.squeeze(1)
+            attention_loss = self.attention_loss(attention_map_pred, samples["attention_map"].half())
+            loss = loss + 0.25 * attention_loss
+            result_dict["attention_loss"] = attention_loss
+
+            result_dict["attention_map"] = attention_map_pred
+
+        result_dict["loss"] = loss
+
+        return result_dict
 
     @torch.no_grad()
     def generate(
@@ -197,6 +217,7 @@ class Blip2OPT(Blip2Base):
         length_penalty=1.0,
         num_captions=1,
         temperature=1,
+        use_biased_tokens=False
     ):
         """
         Args:
@@ -272,41 +293,20 @@ class Blip2OPT(Blip2Base):
                 repetition_penalty=repetition_penalty,
                 length_penalty=length_penalty,
                 num_return_sequences=num_captions,
+                use_biased_tokens=use_biased_tokens
             )
             output_text = self.opt_tokenizer.batch_decode(
                 outputs, skip_special_tokens=True
             )
-                            
-            # previous version for transformers<4.27
-            # if use_nucleus_sampling:
-            #     query_embeds = inputs_opt.repeat_interleave(num_captions, dim=0)
-            #     num_beams = 1
-            # else:
-            #     query_embeds = inputs_opt.repeat_interleave(num_beams, dim=0)
-
-            # outputs = self.opt_model.generate(
-            #     input_ids=input_ids,
-            #     query_embeds=query_embeds,
-            #     attention_mask=attention_mask,
-            #     do_sample=use_nucleus_sampling,
-            #     top_p=top_p,
-            #     temperature=temperature,
-            #     num_beams=num_beams,
-            #     max_new_tokens=max_length,
-            #     min_length=min_length,
-            #     eos_token_id=self.eos_token_id,
-            #     repetition_penalty=repetition_penalty,
-            #     length_penalty=length_penalty,
-            #     num_return_sequences=num_captions,
-            # )
-
-            # prompt_length = opt_tokens.input_ids.shape[1]
-            # output_text = self.opt_tokenizer.batch_decode(
-            #     outputs[:, prompt_length:], skip_special_tokens=True
-            # )
             
             output_text = [text.strip() for text in output_text]
-            return output_text
+
+            output_results = {"captions": output_text}
+
+            if self.use_attention:
+                output_results["attention_map"] = query_output.attention_map.squeeze(1)
+
+            return output_results
         
         
     def predict_answers(

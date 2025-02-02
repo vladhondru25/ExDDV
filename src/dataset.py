@@ -151,7 +151,7 @@ class ExplainableDataset(Dataset):
             frames.append(frame)
 
         # Read attention map
-        att_map_path = movie_name.replace(video_metadata["manipulation"], f"attention_maps_{video_metadata['manipulation']}2")
+        att_map_path = movie_name.replace(video_metadata["manipulation"], f"attention_maps_{video_metadata['manipulation']}3")
         att_map_path = att_map_path.replace(att_map_path[-3:], "png")
         attention_map = np.array(Image.open(att_map_path)) / 255.0
 

@@ -173,3 +173,4 @@ testing.ipynb
 src/model
 
 generate.py
+wandb/

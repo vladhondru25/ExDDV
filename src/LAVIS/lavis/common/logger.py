@@ -109,7 +109,7 @@ class MetricLogger(object):
     def global_avg(self):
         loss_str = []
         for name, meter in self.meters.items():
-            loss_str.append("{}: {:.4f}".format(name, meter.global_avg))
+            loss_str.append("{}: {:.8f}".format(name, meter.global_avg))
         return self.delimiter.join(loss_str)
 
     def synchronize_between_processes(self):
@@ -125,8 +125,8 @@ class MetricLogger(object):
             header = ""
         start_time = time.time()
         end = time.time()
-        iter_time = SmoothedValue(fmt="{avg:.4f}")
-        data_time = SmoothedValue(fmt="{avg:.4f}")
+        iter_time = SmoothedValue(fmt="{avg:.6f}")
+        data_time = SmoothedValue(fmt="{avg:.6f}")
         space_fmt = ":" + str(len(str(len(iterable)))) + "d"
         log_msg = [
             header,

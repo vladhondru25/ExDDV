@@ -13,7 +13,7 @@ from tkinter import Label, Button, messagebox
 from database import DatabaseConnector, Difficulty
 from utils import on_ctrl_c_signal, cleanup_and_exit
 
-DATABASE_NAME = "my_database3.db"
+DATABASE_NAME = "my_database.db"
 
 
 class VideoPlayerApp:
@@ -70,7 +70,9 @@ class VideoPlayerApp:
         self.reveal_button.grid(row=1, column=4, padx=10, pady=10)
 
         # Add Text Box and Submit Button
-        self.input_label = Label(self.root, text="Enter Text:")
+        self.click_counter = tk.StringVar()
+        self.click_counter.set(f"Enter Text: \n clicks counter: {len(self.click_locations)}")
+        self.input_label = Label(self.root, textvariable=self.click_counter)
         self.input_label.grid(row=2, column=0, pady=5)
 
         self.text_box = tk.Text(self.root, height=7, width=40, font=('Arial', 14))
@@ -248,6 +250,7 @@ class VideoPlayerApp:
     def show_next(self):
         if self.current_index < len(self.video_pairs) - 1:
             self.click_locations = {}
+            self.click_counter.set(f"Enter Text: \n clicks counter: {len(self.click_locations)}")
 
             self.current_index += 1
             self.show_video_2 = False  # Hide the second video initially for the previous pair
@@ -257,6 +260,7 @@ class VideoPlayerApp:
     def show_previous(self):
         if self.current_index > 0:
             self.click_locations = {}
+            self.click_counter.set(f"Enter Text: \n clicks counter: {len(self.click_locations)}")
 
             self.current_index -= 1
             self.show_video_2 = False  # Hide the second video initially for the previous pair
@@ -297,6 +301,8 @@ class VideoPlayerApp:
         # Get the coordinates of the click relative to the Label
         x, y = event.x, event.y
         self.click_locations[self.frame_idx] = {"x": x / self.new_width, "y": y / self.new_height}
+        
+        self.click_counter.set(f"Enter Text: \n clicks counter: {len(self.click_locations)}")
 
     def close_db_connection(self):
         self.database_conn.close()
