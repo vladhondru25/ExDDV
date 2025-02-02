@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict
 
+import cv2
+import numpy as np
 import pandas as pd
 import torch
 import transformers
@@ -13,19 +15,15 @@ from PIL import Image
 from torch.utils.data import Dataset
 from decord import VideoReader, cpu
 
-from .params import DataArguments
-# import sys
-# sys.path.append("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/src")
-# sys.path.append("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/src/LAVIS")
-# from dataset_phi3 import ExplainableDataset
+# from .params import DataArguments
 
 IMAGE_TOKEN_INDEX = -200
 IGNORE_INDEX = -100
 LLAVA_IMAGE_TOKEN = "<image>"
 VIDEO_TOKEN = "<video>"
 
-FACEFORENSINCS_PATH = "/media/vhondru/hdd/dp/manipulated_videos"
-DEEPFAKECHALLENGE_PATH = "/media/vhondru/hdd/deepfake_dataset_challenge"
+FACEFORENSINCS_PATH = "/home/eivor/data/dp/manipulated_videos"
+DEEPFAKECHALLENGE_PATH = "/home/eivor/data/deepfake_dataset_challenge"
 
 class Label(Enum):
     REAL = 0.0
@@ -48,7 +46,7 @@ def encode_video(video_path, max_num_frames=10):
         frame_idx = uniform_sample(frame_idx, max_num_frames)
     frames = vr.get_batch(frame_idx).asnumpy()
     frames = [Image.fromarray(v.astype('uint8')) for v in frames]
-    return frames
+    return frames, frame_idx
 
 def pad_sequence(sequences, padding_side='right', padding_value=0):
     """
@@ -69,6 +67,13 @@ def pad_sequence(sequences, padding_side='right', padding_value=0):
             output.data[i, -length:] = seq
     return output
 
+def find_closest_values(list1, list2):
+    closest_values = []
+    for num in list1:
+        closest = min(list2, key=lambda x: abs(x - num))  # Find the closest value in list2
+        closest_values.append(closest)
+    return closest_values
+
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
@@ -76,7 +81,7 @@ class LazySupervisedDataset(Dataset):
         self,
         data_path: str | list,
         processor: transformers.ProcessorMixin,
-        data_args: DataArguments,
+        # data_args: DataArguments,
         padding=True,
     ):
         super(LazySupervisedDataset, self).__init__()
@@ -189,10 +194,17 @@ class LazySupervisedDataset(Dataset):
         
         return data_dict
 
-
 class ExplainableDataset(Dataset):
+    flag_use_masking = True
+    flag_draw_keypoints = False
+    RADIUS = 70 # 55
+    assert not (flag_draw_keypoints and flag_draw_keypoints)
+    
+    video_question = "What is wrong in this video?" if not flag_draw_keypoints else "What is wrong in this video? The green dot will indicate the area."
+
     def __init__(self, split, processor) -> None:
-        csv_data_fake = pd.read_csv("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/dataset.csv")
+        csv_data_fake = pd.read_csv("/home/eivor/biodeep/xAI_deepfake/dataset.csv")
+        # csv_data_fake = csv_data_fake[csv_data_fake["dataset"] == "Farceforensics++"]
         csv_data_fake["movie_name"] = csv_data_fake.apply(self._obtain_path, axis=1)
         csv_data_fake["label"] = Label.FAKE.value
 
@@ -209,6 +221,7 @@ class ExplainableDataset(Dataset):
 
         self.csv_data = self.csv_data.sample(frac=1, random_state=0).reset_index()
 
+        self.split = split
         if split == "train":
             self.csv_data = self.csv_data[100:]
         elif split == "val":
@@ -223,6 +236,8 @@ class ExplainableDataset(Dataset):
         ])
 
         self.processor = processor
+        
+        print(f'Total data: {len(self.csv_data)}')
 
     def get_img_ids(self):
         return self.csv_data["id"].to_list()
@@ -251,6 +266,60 @@ class ExplainableDataset(Dataset):
 
         return collated_dict
     
+    @staticmethod
+    def draw_keypoints(image, keypoint, color_gt=(0, 255, 0), radius=5):
+        """
+        Draws ground-truth and predicted keypoints on the image.
+        
+        Args:
+            image (np.ndarray)
+        """
+        img_with_keypoints = image.copy()
+        h,w,_ = img_with_keypoints.shape
+        # Draw ground-truth keypoints
+        cv2.circle(img_with_keypoints, (int(keypoint["x"]*w), int(keypoint["y"]*h)), radius, color_gt, -1)
+
+        return img_with_keypoints
+    
+    @staticmethod
+    def apply_mask(frame, keypoint, use_hard_mask=True, radius=75):
+        _,h,w = frame.shape
+        kp_x = keypoint["x"] * w
+        kp_y = keypoint["y"] * h
+        
+        # Create a coordinate grid
+        yy, xx = np.meshgrid(np.arange(h), np.arange(w), indexing='ij')
+        
+        # Compute the distance from the keypoint
+        distance = np.sqrt((xx - kp_x)**2 + (yy - kp_y)**2)
+        
+        # Create a mask where the distance is less than or equal to the radius
+        mask = (distance <= radius).astype(np.uint8)
+        
+        if use_hard_mask:
+            frame = frame * mask[None,...]
+        else:
+            blur_ksize = 83
+            dilation_iter = 1
+            
+            # Ensure binary mask is in float format for processing
+            mask = mask.astype(np.float32)
+            
+            # Gaussian blur to create a smooth transition
+            blurred = cv2.GaussianBlur(mask, (blur_ksize, blur_ksize), 83)
+            
+            # Normalize the blurred mask to range [0, 1]
+            blurred_normalized = cv2.normalize(blurred, None, 0, 1, cv2.NORM_MINMAX)
+            
+            # Dilation to reinforce or expand the transition
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            dilated = cv2.dilate(blurred_normalized, kernel, iterations=dilation_iter)
+            
+            frame = frame * dilated[...,None]
+            frame = frame.astype(np.uint8)
+            
+        return frame
+    
     def __getitem__(self, index):
         video_metadata = self.csv_data.loc[index]
 
@@ -262,7 +331,23 @@ class ExplainableDataset(Dataset):
 
         processor = self.processor
 
-        images = encode_video(movie_name, INPUT_NO_OF_FRAMES)
+        images, frames_indices = encode_video(movie_name, INPUT_NO_OF_FRAMES)
+        
+        keypoints_kwargs = {}
+        if self.flag_draw_keypoints or self.flag_use_masking:
+            click_locations = json.loads(click_locations)
+            click_locations_time = [int(t) for t in list(click_locations.keys())]
+            closest_frame_indices = find_closest_values(frames_indices, click_locations_time)
+            
+            keypoints = [click_locations[str(c)] for c in closest_frame_indices]
+            
+        if self.flag_draw_keypoints:
+            images = [self.draw_keypoints(np.array(img), kp) for img,kp in zip(images,keypoints)]
+            images = [Image.fromarray(img) for img in images]
+        
+        if self.flag_use_masking:
+            keypoints_kwargs = {"keypoints": keypoints, "keypoints_fn": self.apply_mask, "use_hard_mask": True, "radius": self.RADIUS}
+            # keypoints_kwargs = {"keypoints": keypoints, "keypoints_fn": self.apply_mask, "use_hard_mask": False, "radius": 65}
 
         is_video = True
         num_frames = len(images)
@@ -270,7 +355,7 @@ class ExplainableDataset(Dataset):
         conversation = [
             {
                 "from": "human",
-                "value": "<video>\nWhat is wrong in this video?"
+                "value": f"<video>\n{self.video_question}"
             },
             {
                 "from": "gpt",
@@ -292,7 +377,7 @@ class ExplainableDataset(Dataset):
             gpt_response = f"{gpt_response['content']}<|end|>\n"
             
             if idx == 0:
-                inputs = processor(user_input, images, return_tensors='pt')
+                inputs = processor(user_input, images, return_tensors='pt', **keypoints_kwargs)
                 prompt_input_ids = inputs['input_ids']
                 all_pixel_values.append(inputs.get('pixel_values'))
                 all_image_sizes.append(inputs.get('image_sizes'))
@@ -332,6 +417,8 @@ class ExplainableDataset(Dataset):
             attention_mask=attention_mask,
             labels=labels,
         )
+        if self.split == "val":
+            data_dict["text"] = text
         
         return data_dict
 
@@ -346,12 +433,14 @@ class DataCollatorForSupervisedDataset(object):
         batch_label_ids = []
         batch_pixel_values = []
         batch_image_sizes = []
+        batch_texts = []
 
         for example in examples:
             batch_input_ids.append(example["input_ids"])
             batch_label_ids.append(example["labels"])
             batch_pixel_values.append(example.get("pixel_values"))
             batch_image_sizes.append(example.get("image_sizes"))
+            batch_texts.append(example.get("text"))
         
         input_ids = pad_sequence(
             batch_input_ids, padding_side='right', padding_value=self.pad_token_id
@@ -367,6 +456,9 @@ class DataCollatorForSupervisedDataset(object):
             labels=labels,
             attention_mask=attention_mask,
         )
+        
+        if batch_texts[0] is not None:
+            batch_dict.update(text=batch_texts)
 
         if pixel_values is not None:
             batch_dict.update(pixel_values=pixel_values, image_sizes=image_sizes)
@@ -419,9 +511,26 @@ def make_supervised_data_module(processor, data_args):
     #     data_path=data_args.data_path, processor=processor, data_args=data_args
     # )
     sft_dataset = ExplainableDataset(split="train", processor=processor)
+    eval_dataset = ExplainableDataset(split="val", processor=processor)
     data_collator = DataCollatorForSupervisedDataset(pad_token_id=processor.tokenizer.pad_token_id)
     # data_collator = sft_dataset.collater
 
     return dict(train_dataset=sft_dataset,
-                eval_dataset=None,
+                eval_dataset=eval_dataset,
                 data_collator=data_collator)
+    
+    
+if __name__ == "__main__":
+    from transformers import AutoProcessor
+    
+    
+    processor = AutoProcessor.from_pretrained("microsoft/Phi-3.5-vision-instruct",
+        cache_dir=None, 
+        padding_side='right',
+        trust_remote_code=True,
+        num_crops=4,
+        model_max_length=131072
+    )
+    
+    sft_dataset = ExplainableDataset(split="train", processor=processor)
+    sft_dataset[0]

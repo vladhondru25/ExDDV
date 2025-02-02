@@ -11,10 +11,12 @@ def merge_lora(args):
         state_dict = model.state_dict()
         state_dict = {k:v for k, v in state_dict.items() if "wte" not in k}
         model.save_pretrained(args.save_model_path, state_dict=state_dict, safe_serialization=True)
+        processor.chat_template = processor.tokenizer.chat_template
         processor.save_pretrained(args.save_model_path)
 
     else:
         model.save_pretrained(args.save_model_path, safe_serialization=False)
+        processor.chat_template = processor.tokenizer.chat_template
         processor.save_pretrained(args.save_model_path)
 
     modify_config_file(args.save_model_path)

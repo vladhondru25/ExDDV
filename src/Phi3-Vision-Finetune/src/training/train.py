@@ -74,7 +74,12 @@ def train():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     assert training_args.num_crops <= 16, 'num_crops must be less than or equal to 16'
-    assert not (training_args.lora_enable and training_args.freeze_llm), 'When using LoRA, the LLM should not be frozen. If you want to freeze the LLM, please disable LoRA.'
+    
+    if training_args.lora_enable and not training_args.freeze_llm:
+        raise ValueError("If `lora_enable` is True, `freeze_llm` must also be True.")
+    
+    if training_args.vision_lora and not training_args.freeze_vision_tower:
+        raise ValueError("If `vision_lora` is True, `freeze_vision_tower` must also be True.")
 
     if not training_args.lora_enable:
         assert not training_args.vision_lora, \
@@ -123,11 +128,13 @@ def train():
     if training_args.bits in [4,8]:
         model.config.torch_dtype = (torch.float32 if training_args.fp16 else (torch.bfloat16 if training_args.bf16 else torch.float32))
         from peft import prepare_model_for_kbit_training
-        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing, gradient_checkpointing_kwargs={"use_reentrant": False})
+        # This is a workaround for a bug in the current implementation of gradient checkpointing
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing, gradient_checkpointing_kwargs={"use_reentrant": True})
     
     if training_args.gradient_checkpointing:
         model.enable_input_require_grads()
-        training_args.gradient_checkpointing_kwargs = {"use_reentrant": False}
+        # This is a workaround for a bug in the current implementation of gradient checkpointing
+        training_args.gradient_checkpointing_kwargs = {"use_reentrant": True}
 
     if training_args.lora_enable:
         lora_namespan_exclude = training_args.lora_namespan_exclude
@@ -165,10 +172,11 @@ def train():
     
     # When using LoRA, the model is rapped once more.
     if training_args.lora_enable:
-        model_to_configure = model.model.model
+        model_to_configure = model.model
+        configure_llm(model_to_configure, training_args)
     else:
         model_to_configure = model.model
-        configure_llm(model, training_args)
+        configure_llm(model_to_configure, training_args)
     
     if not training_args.vision_lora:
         configure_vision_tower(model_to_configure, training_args, compute_dtype, training_args.device)
