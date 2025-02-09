@@ -105,7 +105,7 @@ class VideoPlayerApp:
     def _initialise_data(self):
         video_names = os.listdir(self.movies_path)
 
-        if self.dataset == "Farceforensics++":
+        if "forensics" in self.dataset:
             # This is used to select Eduard's or Vlad's videos
             if self.username == "Eduard Hogea":
                 video_names = [vid_name for vid_name in video_names if int(vid_name.split("_")[0]) < 500]
