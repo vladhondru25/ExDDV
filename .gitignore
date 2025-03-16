@@ -10,3 +10,4 @@ wandb/
 src/keypoints_dataset/
 *.png
 *.db:Zone*
+export_database.py
