@@ -110,7 +110,7 @@ class Blip2OPT(Blip2Base):
 
             self.classification_loss = nn.BCEWithLogitsLoss()
 
-        self.use_attention = True
+        self.use_attention = False
         self.attention_loss = nn.BCEWithLogitsLoss()
         # self.attention_loss = nn.MSELoss()
 

@@ -17,9 +17,11 @@ from lavis.processors.blip_processors import (
 )
 
 
-FACEFORENSINCS_PATH = "/media/vhondru/hdd/dp/manipulated_videos"
-DEEPFAKECHALLENGE_PATH = "/media/vhondru/hdd/deepfake_dataset_challenge"
-
+FACEFORENSINCS_PATH = "/home/eivor/data/dp/manipulated_videos"
+DEEPFAKECHALLENGE_PATH = "/home/eivor/data/deepfake_dataset_challenge"
+DEPERFORENSINCS_PATH = "/home/eivor/data/ffpp/manipulated_sequences"
+BIODEEPAV_PATH = "/home/eivor/data/BioDeepAV/fake/videos"
+REAL_VIDEOS_PATH = "/home/eivor/data/dp/original_data/original/data/original_sequences/youtube/c23/videos"
 
 class Label(Enum):
     REAL = 0.0
@@ -29,28 +31,25 @@ WIDTH = 500
 HEIGHT = 400
 
 class ExplainableDataset(Dataset):
+    use_keypoints = False
+    use_hard_masking = False
+    
     def __init__(self, split, vis_processors=None) -> None:
-        csv_data_fake = pd.read_csv("/home/vhondru/vhondru/phd/biodeep/xAI_deepfake/dataset.csv")
+        csv_data_fake = pd.read_csv("/home/eivor/biodeep/xAI_deepfake/dataset5.csv")
         csv_data_fake["movie_name"] = csv_data_fake.apply(self._obtain_path, axis=1)
-        csv_data_fake["label"] = Label.FAKE.value
-
-        # csv_data_real = csv_data_fake.copy()
-        # csv_data_real["movie_name"] = csv_data_real["movie_name"].map(
-        #     lambda x: os.path.join("/media/vhondru/hdd/dp/original_data/original/data/original_sequences/youtube/c23/videos", x)
-        # )
-        # csv_data_real["text"] = "There is nothing unnormal in the video."
-        # csv_data_real["label"] = Label.REAL.value
-
-        # self.csv_data = pd.concat((csv_data_fake, csv_data_real))
         self.csv_data = csv_data_fake
-
 
         self.csv_data = self.csv_data.sample(frac=1, random_state=0).reset_index()
 
+        self.split = split
         if split == "train":
-            self.csv_data = self.csv_data[100:]
+            self.csv_data = self.csv_data[self.csv_data["split"] == "train"]
         elif split == "val":
-            self.csv_data = self.csv_data[:100]
+            self.csv_data = self.csv_data[self.csv_data["split"] == "val"]
+        elif split == "test":
+            self.csv_data = self.csv_data[self.csv_data["split"] == "test"]
+        elif split == "train+val"
+            self.csv_data = self.csv_data[self.csv_data["split"] != "test"]
         else:
             raise Exception(f"split={split} not implemented.")
 
@@ -68,8 +67,14 @@ class ExplainableDataset(Dataset):
     def _obtain_path(self, row):
         if row["dataset"] == "Farceforensics++":
             return os.path.join(FACEFORENSINCS_PATH, row["manipulation"], row["movie_name"])
+        elif row["dataset"] == "Deeperforensics":
+            return os.path.join(DEPERFORENSINCS_PATH, row["manipulation"], "c23/videos", row["movie_name"])
         elif row["dataset"] == "DeepfakeDetection":
             return os.path.join(DEEPFAKECHALLENGE_PATH, row["manipulation"], row["movie_name"])
+        elif row["dataset"] == "BioDeepAV":
+            return os.path.join(BIODEEPAV_PATH, row["movie_name"])
+        elif row["dataset"] == "Original":
+            return os.path.join(REAL_VIDEOS_PATH, row["movie_name"])
 
     def __len__(self):
         return len(self.csv_data)
@@ -89,6 +94,51 @@ class ExplainableDataset(Dataset):
 
         return collated_dict
         # return default_collate(samples)
+        
+    @staticmethod
+    def apply_mask(frame, keypoint, use_hard_mask=True, radius=75):
+        c,h,w = frame.shape
+        kp_x = keypoint["x"] * w
+        kp_y = keypoint["y"] * h
+        
+        # Create a coordinate grid
+        yy, xx = np.meshgrid(np.arange(h), np.arange(w), indexing='ij')
+        
+        # Compute the distance from the keypoint
+        distance = np.sqrt((xx - kp_x)**2 + (yy - kp_y)**2)
+        
+        # Create a mask where the distance is less than or equal to the radius
+        mask = (distance <= radius).astype(np.uint8)
+        
+        if use_hard_mask:
+            frame = frame * mask[None,...]
+        else:
+            blur_ksize = 83
+            dilation_iter = 1
+            
+            # Ensure binary mask is in float format for processing
+            mask = mask.astype(np.float32)
+            
+            # Gaussian blur to create a smooth transition
+            blurred = cv2.GaussianBlur(mask, (blur_ksize, blur_ksize), 83)
+            
+            # Normalize the blurred mask to range [0, 1]
+            blurred_normalized = cv2.normalize(blurred, None, 0, 1, cv2.NORM_MINMAX)
+            
+            # Dilation to reinforce or expand the transition
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            dilated = cv2.dilate(blurred_normalized, kernel, iterations=dilation_iter)
+            
+            frame = frame * dilated[None,...]
+            
+        return frame
+    
+    def find_closest_values(self, list1, list2):
+        closest_values = []
+        for num in list1:
+            closest = min(list2, key=lambda x: abs(x - num))  # Find the closest value in list2
+            closest_values.append(closest)
+        return closest_values
     
     def __getitem__(self, index):
         video_metadata = self.csv_data.loc[index]
@@ -96,7 +146,6 @@ class ExplainableDataset(Dataset):
         movie_name = video_metadata["movie_name"]
         text = video_metadata["text"]
         click_locations = video_metadata["click_locations"]
-        label = video_metadata["label"]
         image_id = video_metadata["id"]
 
         cap = cv2.VideoCapture(movie_name)
@@ -104,36 +153,15 @@ class ExplainableDataset(Dataset):
 
         frames_indices = np.linspace(start=0, stop=movie_no_frames-1, num=INPUT_NO_OF_FRAMES)
         frames_indices = frames_indices.astype(int)
-
-        # Use frames on clicked locations if they exist
-        # if click_locations != "{}":
-        #     click_locations = json.loads(click_locations)
-
-        #     frames_with_click = list(click_locations.keys())
-        #     frames_with_click = list(map(int, frames_with_click))
-        #     frames_with_click.sort()
-
-        #     # Debug
-        #     # max_frame_no = max(frames_with_click)
-        #     # if max_frame_no > movie_no_frames:
-        #     #     self.counter += 1
-        #     #     self.users[video_metadata["username"]] += 1
-
-        #     i = 0
-        #     while len(frames_indices) - len(frames_with_click) > 0:
-        #         if i % 2 == 0 and frames_indices[-i-1] not in frames_with_click:
-        #             frames_with_click.append(frames_indices[-i-1])
-        #         elif i % 2 != 0 and frames_indices[i] not in frames_with_click:
-        #             frames_with_click.append(frames_indices[i])
-
-        #         i = i + 1
-
-        #     frames_indices = sorted(frames_with_click)
-
-        #     frames_indices = list(map(int, frames_indices))
+        
+        click_locations = json.loads(click_locations)
+        click_locations_time = [int(t) for t in list(click_locations.keys())]
+        closest_frame_indices = self.find_closest_values(frames_indices, click_locations_time)
+            
+        keypoints = [click_locations[str(c)] for c in closest_frame_indices]
 
         frames = []
-        for frame_ind in frames_indices[:INPUT_NO_OF_FRAMES]:
+        for frame_ind,keypoint in zip(frames_indices[:INPUT_NO_OF_FRAMES],keypoints[:INPUT_NO_OF_FRAMES]):
             if frame_ind == movie_no_frames:
                 frame_ind = frame_ind - 1
 
@@ -148,21 +176,17 @@ class ExplainableDataset(Dataset):
             frame = Image.fromarray(frame)
             frame = self.vis_processor(frame)
 
-            frames.append(frame)
+            if self.use_keypoints:
+                frame = self.apply_mask(frame, keypoint, use_hard_mask=self.use_hard_masking)
 
-        # Read attention map
-        att_map_path = movie_name.replace(video_metadata["manipulation"], f"attention_maps_{video_metadata['manipulation']}3")
-        att_map_path = att_map_path.replace(att_map_path[-3:], "png")
-        attention_map = np.array(Image.open(att_map_path)) / 255.0
+            frames.append(frame)
 
         text_input = self.text_processor(text)
     
         return {
             "image": torch.stack(frames),
-            "label": torch.tensor(label),
             "text_input": text_input,
             "image_id": image_id, 
-            "attention_map": torch.tensor(attention_map),
         }
 
 

@@ -8,7 +8,7 @@
 import torch
 import torchaudio
 import torchaudio.transforms as transforms
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from omegaconf import OmegaConf
 import torchaudio.compliance.kaldi as ta_kaldi
 

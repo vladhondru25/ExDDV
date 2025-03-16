@@ -60,3 +60,16 @@ class DatabaseConnector(object):
 
     def close(self):
         self.connection.close()
+
+
+if __name__ == "__main__":
+    input_db_name = "/home/eivor/biodeep/xAI_deepfake/databases/vlad_database.db"
+    input_db_name = "/home/eivor/biodeep/xAI_deepfake/databases/vlad_all_dp.db"
+    input_db_name = "/home/eivor/biodeep/xAI_deepfake/databases/eduard_database_faceswap.db"
+    input_db_name = "/home/eivor/biodeep/xAI_deepfake/databases/eduard_database_faceshifter.db"
+    input_db_name = "/home/eivor/biodeep/xAI_deepfake/databases/my_database2_vlad.db"
+    
+    db_connector = DatabaseConnector(cfg=None, db_name=input_db_name)
+    all_rows = db_connector.read_all_movies()
+    print(all_rows)
+    print(len(all_rows))

@@ -41,15 +41,15 @@ run:
   # optimizer
   lr_sched: "linear_warmup_cosine_lr"
   init_lr: 1e-4
-  min_lr: 1e-5
+  min_lr: 0
   warmup_lr: 1e-6
   warmup_steps: 50
   weight_decay: 0.05
 
-  max_epoch: 4
+  max_epoch: 10
   batch_size_train: 16
   batch_size_eval: 16
-  num_workers: 4
+  num_workers: 8
   accum_grad_iters: 1
   save_freq: 1
 
@@ -59,7 +59,7 @@ run:
 
   use_biased_tokens: False
 
-  seed: 42
+  seed: 0
   output_dir: "output/BLIP2/Pretrain_stage2"
 
   amp: True

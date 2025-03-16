@@ -8,12 +8,12 @@ export PYTHONPATH=src:$PYTHONPATH
 
 # If you want to tune the `embed_token` with LoRA, You need to tune `lm_head` together
 
-deepspeed src/training/train.py \
+python -m debugpy --wait-for-client --listen 5678 -m deepspeed.launcher.runner src/training/train.py \
     --lora_enable True \
     --vision_lora True \
     --lora_namespan_exclude "['lm_head', 'embed_tokens']" \
-    --lora_rank 64 \
-    --lora_alpha 256 \
+    --lora_rank 32 \
+    --lora_alpha 16 \
     --lora_dropout 0.05 \
     --num_lora_modules -1 \
     --deepspeed scripts/zero3.json \
@@ -28,22 +28,19 @@ deepspeed src/training/train.py \
     --disable_flash_attn2 False \
     --output_dir output/lora_vision_test \
     --num_crops 4 \
-    --num_train_epochs 10 \
-    --per_device_train_batch_size 32 \
+    --num_train_epochs 2 \
+    --per_device_train_batch_size 2 \
     --gradient_accumulation_steps 1 \
-    --per_device_eval_batch_size 25 \
+    --per_device_eval_batch_size 2 \
     --eval_strategy "steps" \
-    --eval_steps 40 \
-    --save_strategy "steps" \
-    --save_steps 40 \
-    --learning_rate 2e-4\
+    --eval_steps 2 \
+    --learning_rate 2e-4 \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
     --logging_steps 2 \
     --tf32 True \
     --gradient_checkpointing True \
-    --report_to wandb \
+    --report_to none \
     --lazy_preprocess True \
-    --dataloader_num_workers 4
-    # --max_steps 5 \
+    --dataloader_num_workers 0

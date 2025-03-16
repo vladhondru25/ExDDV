@@ -1,6 +1,7 @@
 import configparser
 import json
 import os
+import random
 import time
 import signal
 from PIL import Image, ImageTk
@@ -13,7 +14,7 @@ from tkinter import Label, Button, messagebox
 from database import DatabaseConnector, Difficulty
 from utils import on_ctrl_c_signal, cleanup_and_exit
 
-DATABASE_NAME = "my_database.db"
+DATABASE_NAME = "database_xai.db"
 
 
 class VideoPlayerApp:
@@ -142,6 +143,24 @@ class VideoPlayerApp:
 
             video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
             video_pairs_2 = [os.path.join(self.movies_path, metadata[video_name]["original"]) for video_name in video_names]
+        elif self.dataset == "BioDeepAV":
+            video_names = os.listdir(self.movies_path)
+            video_names = sorted([vid_name for vid_name in video_names if vid_name[-4:] == ".mp4"])
+            if self.username == "Eduard Hogea":
+                video_names = video_names[:len(video_names) // 2]
+            else:
+                video_names = video_names[len(video_names) // 2:]
+
+            print(f"Original videos: {len(video_names)}")
+            videos_annotated = self.database_conn.read_movie_entries(self.username)
+            videos_not_annotated = set(video_names).difference(videos_annotated) 
+            video_names = list(videos_not_annotated)
+            print(f"Remaining videos: {len(video_names)}")
+            
+            random.shuffle(video_names)
+
+            video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
+            video_pairs_2 = video_pairs_1
         else:
             raise Exception("Dataset not implemented")
         

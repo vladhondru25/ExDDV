@@ -74,10 +74,10 @@ def train():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     assert training_args.num_crops <= 16, 'num_crops must be less than or equal to 16'
-    
+
     if training_args.lora_enable and not training_args.freeze_llm:
         raise ValueError("If `lora_enable` is True, `freeze_llm` must also be True.")
-    
+
     if training_args.vision_lora and not training_args.freeze_vision_tower:
         raise ValueError("If `vision_lora` is True, `freeze_vision_tower` must also be True.")
 

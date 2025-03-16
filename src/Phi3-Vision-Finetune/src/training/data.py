@@ -24,6 +24,9 @@ VIDEO_TOKEN = "<video>"
 
 FACEFORENSINCS_PATH = "/home/eivor/data/dp/manipulated_videos"
 DEEPFAKECHALLENGE_PATH = "/home/eivor/data/deepfake_dataset_challenge"
+DEPERFORENSINCS_PATH = "/home/eivor/data/ffpp/manipulated_sequences"
+BIODEEPAV_PATH = "/home/eivor/data/BioDeepAV/fake/videos"
+REAL_VIDEOS_PATH = "/home/eivor/data/dp/original_data/original/data/original_sequences/youtube/c23/videos"
 
 class Label(Enum):
     REAL = 0.0
@@ -195,7 +198,7 @@ class LazySupervisedDataset(Dataset):
         return data_dict
 
 class ExplainableDataset(Dataset):
-    flag_use_masking = True
+    flag_use_masking = False
     flag_draw_keypoints = False
     RADIUS = 70 # 55
     assert not (flag_draw_keypoints and flag_draw_keypoints)
@@ -203,7 +206,7 @@ class ExplainableDataset(Dataset):
     video_question = "What is wrong in this video?" if not flag_draw_keypoints else "What is wrong in this video? The green dot will indicate the area."
 
     def __init__(self, split, processor) -> None:
-        csv_data_fake = pd.read_csv("/home/eivor/biodeep/xAI_deepfake/dataset.csv")
+        csv_data_fake = pd.read_csv("/home/eivor/biodeep/xAI_deepfake/dataset5.csv")
         # csv_data_fake = csv_data_fake[csv_data_fake["dataset"] == "Farceforensics++"]
         csv_data_fake["movie_name"] = csv_data_fake.apply(self._obtain_path, axis=1)
         csv_data_fake["label"] = Label.FAKE.value
@@ -223,9 +226,11 @@ class ExplainableDataset(Dataset):
 
         self.split = split
         if split == "train":
-            self.csv_data = self.csv_data[100:]
+            self.csv_data = self.csv_data[self.csv_data["split"] == "train"]
         elif split == "val":
-            self.csv_data = self.csv_data[:100]
+            self.csv_data = self.csv_data[self.csv_data["split"] == "val"]
+        elif split == "test":
+            self.csv_data = self.csv_data[self.csv_data["split"] == "test"]
         else:
             raise Exception(f"split={split} not implemented.")
 
@@ -245,8 +250,14 @@ class ExplainableDataset(Dataset):
     def _obtain_path(self, row):
         if row["dataset"] == "Farceforensics++":
             return os.path.join(FACEFORENSINCS_PATH, row["manipulation"], row["movie_name"])
+        elif row["dataset"] == "Deeperforensics":
+            return os.path.join(DEPERFORENSINCS_PATH, row["manipulation"], "c23/videos", row["movie_name"])
         elif row["dataset"] == "DeepfakeDetection":
             return os.path.join(DEEPFAKECHALLENGE_PATH, row["manipulation"], row["movie_name"])
+        elif row["dataset"] == "BioDeepAV":
+            return os.path.join(BIODEEPAV_PATH, row["movie_name"])
+        elif row["dataset"] == "Original":
+            return os.path.join(REAL_VIDEOS_PATH, row["movie_name"])
 
     def __len__(self):
         return len(self.csv_data)
@@ -315,7 +326,7 @@ class ExplainableDataset(Dataset):
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
             dilated = cv2.dilate(blurred_normalized, kernel, iterations=dilation_iter)
             
-            frame = frame * dilated[...,None]
+            frame = frame * dilated[None,...]
             frame = frame.astype(np.uint8)
             
         return frame
@@ -346,8 +357,8 @@ class ExplainableDataset(Dataset):
             images = [Image.fromarray(img) for img in images]
         
         if self.flag_use_masking:
-            keypoints_kwargs = {"keypoints": keypoints, "keypoints_fn": self.apply_mask, "use_hard_mask": True, "radius": self.RADIUS}
-            # keypoints_kwargs = {"keypoints": keypoints, "keypoints_fn": self.apply_mask, "use_hard_mask": False, "radius": 65}
+            # keypoints_kwargs = {"keypoints": keypoints, "keypoints_fn": self.apply_mask, "use_hard_mask": True, "radius": self.RADIUS}
+            keypoints_kwargs = {"keypoints": keypoints, "keypoints_fn": self.apply_mask, "use_hard_mask": False, "radius": self.RADIUS}
 
         is_video = True
         num_frames = len(images)

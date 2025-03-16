@@ -8,3 +8,5 @@ wandb/
 *.caffemodel
 
 src/keypoints_dataset/
+*.png
+*.db:Zone*

@@ -609,7 +609,7 @@ class RunnerBase:
             "checkpoint_{}.pth".format("best" if is_best else cur_epoch),
         )
         logging.info("Saving checkpoint at epoch {} to {}.".format(cur_epoch, save_to))
-        # torch.save(save_obj, save_to)
+        torch.save(save_obj, save_to)
 
     def _reload_best_model(self, model):
         """

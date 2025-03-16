@@ -16,7 +16,7 @@ from lavis.common.utils import is_convertible_to_int, is_url, cache_url
 
 from torch.nn import BCEWithLogitsLoss
 from scipy import spatial
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 @registry.register_task("captioning")
 class CaptionTask(BaseTask):

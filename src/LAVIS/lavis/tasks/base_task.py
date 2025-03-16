@@ -66,7 +66,7 @@ class BaseTask:
         for k,v in output.items():
             if "loss" in k:
                 loss_dict[k] = v
-        return output["loss"], loss_dict, output["attention_map"]
+        return output["loss"], loss_dict#, output["attention_map"]
 
     def valid_step(self, model, samples):
         raise NotImplementedError
@@ -97,16 +97,16 @@ class BaseTask:
 
             eval_output = self.valid_step(model=model, samples=samples)
 
-            attention_map = [eo.pop("attention_map") for eo in eval_output]
-            attention_map = torch.stack(attention_map)
-            if len(results) == 0:
-                self.save_attention_maps(
-                    samples["attention_map"].cpu(),
-                    attention_map.cpu(),
-                    registry.get_path("result_dir").replace("/result",""),
-                    epoch,
-                    "val"
-                )
+            # attention_map = [eo.pop("attention_map") for eo in eval_output]
+            # attention_map = torch.stack(attention_map)
+            # if len(results) == 0:
+            #     self.save_attention_maps(
+            #         samples["attention_map"].cpu(),
+            #         attention_map.cpu(),
+            #         registry.get_path("result_dir").replace("/result",""),
+            #         epoch,
+            #         "val"
+            #     )
 
             results.extend(eval_output)
 
@@ -237,17 +237,18 @@ class BaseTask:
             lr_scheduler.step(cur_epoch=inner_epoch, cur_step=i)
 
             with torch.cuda.amp.autocast(enabled=use_amp):
-                loss, loss_dict, attention_map = self.train_step(model=model, samples=samples)
+                loss, loss_dict = self.train_step(model=model, samples=samples)
+                # loss, loss_dict, attention_map = self.train_step(model=model, samples=samples)
                 loss /= accum_grad_iters #TODO: not affect loss_dict values for logging
             
-            if i == 0:
-                self.save_attention_maps(
-                    samples["attention_map"].cpu(),
-                    attention_map.cpu(),
-                    registry.get_path("result_dir").replace("/result",""),
-                    epoch,
-                    "train"
-                )
+            # if i == 0:
+            #     self.save_attention_maps(
+            #         samples["attention_map"].cpu(),
+            #         attention_map.cpu(),
+            #         registry.get_path("result_dir").replace("/result",""),
+            #         epoch,
+            #         "train"
+            #     )
 
             # after_train_step()
             if use_amp:

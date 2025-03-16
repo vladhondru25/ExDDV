@@ -6,7 +6,7 @@
 """
 from torch.nn import BCEWithLogitsLoss, MSELoss, functional as F
 from scipy import spatial
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 from lavis.common.registry import registry
 from lavis.common.utils import is_convertible_to_int
@@ -61,9 +61,13 @@ class ImageTextPretrainTask(BaseTask):
             use_biased_tokens=self.use_biased_tokens
         )
         img_ids = samples[self.sample_id_key]
-        for pred_caption, gt_caption, img_id, att_map_pred, att_map_gt in zip(outputs["captions"], samples["text_input"], img_ids, outputs["attention_map"], samples["attention_map"]):
+        # for pred_caption, gt_caption, img_id, att_map_pred, att_map_gt in zip(outputs["captions"], samples["text_input"], img_ids, outputs["attention_map"], samples["attention_map"]):
+        #     # att_map_pred = F.sigmoid(att_map_pred)
+        #     att_loss = self.att_loss(att_map_pred.squeeze(1), att_map_gt)
+        for pred_caption, gt_caption, img_id in zip(outputs["captions"], samples["text_input"], img_ids):
             # att_map_pred = F.sigmoid(att_map_pred)
-            att_loss = self.att_loss(att_map_pred.squeeze(1), att_map_gt)
+            # att_loss = self.att_loss(att_map_pred.squeeze(1), att_map_gt)
+            att_loss = 0
 
             # not all img_ids are ints
             img_id = int(img_id) if is_convertible_to_int(img_id) else img_id
@@ -71,7 +75,7 @@ class ImageTextPretrainTask(BaseTask):
                 continue
 
             results.append({"pred_caption": pred_caption, "image_id": img_id, "gt_caption": gt_caption, 
-                            "attention_map": att_map_pred, "att_loss": att_loss.item()
+                            #"att_loss": att_loss.item()
             })
 
         return results
@@ -84,7 +88,7 @@ class ImageTextPretrainTask(BaseTask):
             remove_duplicate="image_id",
         )
 
-        st_model = SentenceTransformer('/media/vhondru/hdd/reverse_sd/img-to-txt/models_chckpts/all-MiniLM-L6-v2', device='cuda')
+        st_model = SentenceTransformer('all-MiniLM-L6-v2', device='cuda')
         ground_truth_embds = []
         predicted_embds = []
         att_loss = []
@@ -98,7 +102,7 @@ class ImageTextPretrainTask(BaseTask):
                 embd = st_model.encode(res["pred_caption"], show_progress_bar=False, convert_to_tensor=False)
                 predicted_embds.append(embd)
 
-                att_loss.append(res["att_loss"])
+                # att_loss.append(res["att_loss"])
 
         def cosine_similarity(y_trues, y_preds):
             return np.mean([
@@ -112,7 +116,7 @@ class ImageTextPretrainTask(BaseTask):
             # )
             metrics = {
                 "agg_metrics": cosine_similarity(ground_truth_embds, predicted_embds),
-                "att_loss": np.mean(att_loss)
+                # "att_loss": np.mean(att_loss)
             }
         else:
             metrics = {"agg_metrics": 0.0}

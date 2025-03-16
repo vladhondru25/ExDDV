@@ -540,8 +540,8 @@ class BertEncoder(nn.Module):
         next_decoder_cache = () if use_cache else None
 
         # IDX_LAYER = [2,4,6,8]
-        IDX_LAYER = [2,3,4,5]
-        # IDX_LAYER = []
+        # IDX_LAYER = [2,3,4,5]
+        IDX_LAYER = []
         attention_map = None
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
@@ -1013,7 +1013,8 @@ class BertModel(BertPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
-            attention_map=encoder_outputs[1],
+            attention_map=None,
+            # attention_map=encoder_outputs[1],
         )
 
 
