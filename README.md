@@ -1,5 +1,19 @@
 
-# In-Context Learning for Deepfake Detection
+# ExDDV: A New Dataset for Explainable Deepfake Detection in Video
+This repository contains the necessary code to run the experiments in the paper "ExDDV: A New Dataset for Explainable Deepfake Detection in Video".
+
+## Dataset
+The csv file containing the annotations is provided to anyone for research purposes. Feel free to contact us so access can be provided.
+
+## Fine-tuning for Deepfake Detection
+There are three different folders inside the `src` folder containing the three models we used: `LAVIS` (BLIP-2), `LLaVA` and `Phi3-Vision-Finetune`. These are forked from the following repositories: [LAVIS](https://github.com/salesforce/LAVIS), [LLaVA](https://github.com/haotian-liu/LLaVA/tree/main) and [Phi3-Vision-Finetune](https://github.com/2U1/Phi3-Vision-Finetune).
+
+### How to run
+Each model is trained as per its corresponding repository. We used the respective training scripts: [BLIP-2](src/LAVIS/lavis/projects/blip2/train/pretrain_stage2_xai.yaml), [LLaVA](src/LLaVA/scripts/v1_5/finetune_task_lora.sh) and [Phi3-Vision](src/Phi3-Vision-Finetune/scripts/finetune_lora_vision.sh). The only modification needed is to replaced the paths to the datasets in the corresponding files.
+
+!Note for Phi3-Vision: The file `processing_phi3_v.py` from HuggingFace Transformers must be replaced with the script from [here](src/Phi3-Vision-Finetune/proccessing_phi3_v.py).
+
+## In-Context Learning for Deepfake Detection
 
 The current implementation uses LLaVA 1.5, BLIP-2 and PHI3-Vision. 
 
