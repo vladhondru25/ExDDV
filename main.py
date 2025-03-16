@@ -156,8 +156,6 @@ class VideoPlayerApp:
             videos_not_annotated = set(video_names).difference(videos_annotated) 
             video_names = list(videos_not_annotated)
             print(f"Remaining videos: {len(video_names)}")
-            
-            random.shuffle(video_names)
 
             video_pairs_1 = [os.path.join(self.movies_path, video_name) for video_name in video_names]
             video_pairs_2 = video_pairs_1
