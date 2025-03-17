@@ -3,7 +3,7 @@
 This repository contains the necessary code to run the experiments in the paper "ExDDV: A New Dataset for Explainable Deepfake Detection in Video".
 
 ## Dataset
-The csv file containing the annotations is provided to anyone for research purposes. Feel free to contact us so access can be provided.
+The csv file containing the annotations can be found in this repository. Use the columns `movie_name` and `dataset` to determine the input movie name.
 
 ## Fine-tuning for Deepfake Detection
 There are three different folders inside the `src` folder containing the three models we used: `LAVIS` (BLIP-2), `LLaVA` and `Phi3-Vision-Finetune`. These are forked from the following repositories: [LAVIS](https://github.com/salesforce/LAVIS), [LLaVA](https://github.com/haotian-liu/LLaVA/tree/main) and [Phi3-Vision-Finetune](https://github.com/2U1/Phi3-Vision-Finetune).
