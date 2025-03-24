@@ -1,11 +1,23 @@
 
 # ExDDV: A New Dataset for Explainable Deepfake Detection in Video
-This repository contains the necessary code to run the experiments in the paper "ExDDV: A New Dataset for Explainable Deepfake Detection in Video".
+This repository contains the necessary code to run the experiments in the paper "ExDDV: A New Dataset for Explainable Deepfake Detection in Video". If you use this dataset or code in your research, please cite the corresponding paper:
+
+1. Vlad Hondru, Eduard Hogea, Darian Onchis, Radu Tudor Ionescu. ExDDV: A New Dataset for Explainable Deepfake Detection in Video. arXiv preprint arXiv:2503.14421 (2025).
+
+Bibtex:
+```
+@article{hondru2025exddv,
+  title={ExDDV: A New Dataset for Explainable Deepfake Detection in Video},
+  author={Hondru, Vlad and Hogea, Eduard and Onchis, Darian and Ionescu, Radu Tudor},
+  journal={arXiv preprint arXiv:2503.14421},
+  year={2025}
+}
+```
 
 ## Dataset
 The csv file containing the annotations can be found in this repository. Use the columns `movie_name` and `dataset` to determine the input movie name.
 
-## Fine-tuning for Deepfake Detection
+## Fine-Tuning for Deepfake Detection
 There are three different folders inside the `src` folder containing the three models we used: `LAVIS` (BLIP-2), `LLaVA` and `Phi3-Vision-Finetune`. These are forked from the following repositories: [LAVIS](https://github.com/salesforce/LAVIS), [LLaVA](https://github.com/haotian-liu/LLaVA/tree/main) and [Phi3-Vision-Finetune](https://github.com/2U1/Phi3-Vision-Finetune).
 
 ### How to run
@@ -18,8 +30,6 @@ Each model is trained as per its corresponding repository. We used the respectiv
 The current implementation uses LLaVA 1.5, BLIP-2 and PHI3-Vision. 
 
 ![image](https://github.com/user-attachments/assets/9ea67b6c-9412-4de3-9e65-2886276ee44f)
-
-
 
 **Note:**  
 The code for each model is provided in separate Jupyter notebooks:
