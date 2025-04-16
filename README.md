@@ -14,6 +14,10 @@ Bibtex:
 }
 ```
 
+## License
+
+The dataset is published under the [CC BY-NC-SA 4.0 license](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en).
+
 ## Dataset
 The csv file containing the annotations can be found in this repository. Use the columns `movie_name` and `dataset` to determine the input movie name.
 
