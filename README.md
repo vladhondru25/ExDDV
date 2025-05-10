@@ -1,18 +1,6 @@
 
 # ExDDV: A New Dataset for Explainable Deepfake Detection in Video
-This repository contains the necessary code to run the experiments in the paper "ExDDV: A New Dataset for Explainable Deepfake Detection in Video". If you use this dataset or code in your research, please cite the corresponding paper:
-
-1. Vlad Hondru, Eduard Hogea, Darian Onchis, Radu Tudor Ionescu. ExDDV: A New Dataset for Explainable Deepfake Detection in Video. arXiv preprint arXiv:2503.14421 (2025).
-
-Bibtex:
-```
-@article{hondru2025exddv,
-  title={ExDDV: A New Dataset for Explainable Deepfake Detection in Video},
-  author={Hondru, Vlad and Hogea, Eduard and Onchis, Darian and Ionescu, Radu Tudor},
-  journal={arXiv preprint arXiv:2503.14421},
-  year={2025}
-}
-```
+This repository contains the necessary code to run the experiments in the paper "ExDDV: A New Dataset for Explainable Deepfake Detection in Video". 
 
 ## License
 
@@ -110,4 +98,18 @@ The pipeline outputs CSV files containing:
 - Deepfake analysis results.
 
 
+```
+
+If you use this dataset or code in your research, please cite the corresponding paper:
+
+1. Vlad Hondru, Eduard Hogea, Darian Onchis, Radu Tudor Ionescu. ExDDV: A New Dataset for Explainable Deepfake Detection in Video. arXiv preprint arXiv:2503.14421 (2025).
+
+Bibtex:
+```
+@article{hondru2025exddv,
+  title={ExDDV: A New Dataset for Explainable Deepfake Detection in Video},
+  author={Hondru, Vlad and Hogea, Eduard and Onchis, Darian and Ionescu, Radu Tudor},
+  journal={arXiv preprint arXiv:2503.14421},
+  year={2025}
+}
 ```
