@@ -110,7 +110,7 @@ Bibtex:
 @article{hondru2025exddv,
   title={ExDDV: A New Dataset for Explainable Deepfake Detection in Video},
   author={Hondru, Vlad and Hogea, Eduard and Onchis, Darian and Ionescu, Radu Tudor},
-  journal={arXiv preprint arXiv:2503.14421},
+  journal={under review},
   year={2025}
 }
 ```
